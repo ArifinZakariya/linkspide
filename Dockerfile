@@ -2,6 +2,7 @@ FROM node:20-slim
 
 RUN apt-get update && apt-get install -y \
     libnss3 \
+    libnspr4 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
     libcups2 \
@@ -9,12 +10,27 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libxcomposite1 \
     libxdamage1 \
+    libxfixes3 \
     libxrandr2 \
     libgbm1 \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 \
     libatspi2.0-0 \
+    libwayland-client0 \
+    libwayland-egl1 \
+    libwayland-server0 \
+    libxshmfence1 \
+    libx11-xcb1 \
+    libxcb-dri3-0 \
+    libxcb-shm0 \
+    libxcb-present0 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shm0 \
+    libx11-6 \
+    libxext6 \
+    libx11-xcb1 \
     fonts-ipafont-gothic \
     fonts-wqy-zenhei \
     fonts-thai-tlwg \
