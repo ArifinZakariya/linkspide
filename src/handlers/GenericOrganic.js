@@ -43,11 +43,17 @@ class GenericOrganic {
         }
       }
 
+      const chromePath = process.env.CHROME_PATH || this._findChrome();
       const launchOpts = {
         headless: "new",
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1366,768"],
       };
-      if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
+      if (chromePath) {
+        launchOpts.executablePath = chromePath;
+        log("Chrome: " + chromePath);
+      } else {
+        log("No Chrome found. Set CHROME_PATH or run: npx puppeteer browsers install chrome");
+      }
       browser = await puppeteer.launch(launchOpts);
 
       const page = await browser.newPage();
@@ -396,6 +402,40 @@ class GenericOrganic {
   _isShortlink(u) { return /ouo\.(io|press)|linkvertise|shrinkme|shorte\.st|sh\.st|adf\.ly|bc\.vc|gplinks?|safelinku|exe\.io|tei\.ai|tpi\.(li|ac)|advertisingcamps/.test(u); }
   _title(h) { return h.match(/<title>(.*?)<\/title>/i)?.[1] || ""; }
   _wait(a, b) { return new Promise(r => setTimeout(r, Math.floor(Math.random() * (b - a) + a))); }
+
+  _findChrome() {
+    const fs = require("fs");
+    const paths = [
+      // Linux
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium-browser",
+      "/usr/bin/chromium",
+      // Windows
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      process.env.LOCALAPPDATA + "\\Google\\Chrome\\Application\\chrome.exe",
+      // macOS
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      // Puppeteer cache
+      process.env.HOME + "/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome",
+      process.env.HOME + "/.cache/puppeteer/chrome/win64-*/chrome-win64/chrome.exe",
+    ];
+    for (const p of paths) {
+      try {
+        if (fs.existsSync(p)) return p;
+      } catch {}
+    }
+    // Try glob for puppeteer cache
+    try {
+      const glob = require("child_process").execSync(
+        'find ~/.cache/puppeteer/chrome -name "chrome" -o -name "chrome.exe" 2>/dev/null | head -1',
+        { encoding: "utf-8" }
+      ).trim();
+      if (glob) return glob;
+    } catch {}
+    return null;
+  }
 }
 
 module.exports = new GenericOrganic();
