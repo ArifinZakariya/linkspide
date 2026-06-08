@@ -19,6 +19,7 @@ class PuppeteerBypass {
 
     let browser = null;
     try {
+      const fs = require("fs");
       const launchOpts = {
         headless: "new",
         args: [
@@ -30,7 +31,23 @@ class PuppeteerBypass {
           "--disable-blink-features=AutomationControlled",
         ],
       };
-      if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
+      const chromePath = process.env.CHROME_PATH || (() => {
+        const paths = [
+          "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+          "/usr/bin/chromium-browser", "/usr/bin/chromium",
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+          process.env.LOCALAPPDATA + "\\Google\\Chrome\\Application\\chrome.exe",
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ];
+        for (const p of paths) { try { if (require("fs").existsSync(p)) return p; } catch {} }
+        try {
+          const r = require("child_process").execSync('find ~/.cache/puppeteer/chrome -name "chrome" -o -name "chrome.exe" 2>/dev/null | head -1', { encoding: "utf-8" }).trim();
+          if (r) return r;
+        } catch {}
+        return null;
+      })();
+      if (chromePath) launchOpts.executablePath = chromePath;
       browser = await puppeteer.launch(launchOpts);
 
       const page = await browser.newPage();
