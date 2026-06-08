@@ -18,12 +18,31 @@
   <div class="container">
     <header class="hero">
       <div class="logo">
-        <span class="logo-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-          </svg>
-        </span>
+        <svg class="logo-icon" width="48" height="48" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="18" fill="#8b5cf6"/>
+          <circle cx="44" cy="46" r="4" fill="#fff"/>
+          <circle cx="56" cy="46" r="4" fill="#fff"/>
+          <circle cx="44" cy="46" r="2" fill="#09090b"/>
+          <circle cx="56" cy="46" r="2" fill="#09090b"/>
+          <path d="M50 56 Q50 62 46 66" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+          <path d="M50 56 Q50 62 54 66" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+          <path d="M32 38 Q20 20 8 14" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M36 44 Q22 32 6 30" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M38 52 Q24 48 8 52" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M36 60 Q22 66 10 76" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M68 38 Q80 20 92 14" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M64 44 Q78 32 94 30" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M62 52 Q76 48 92 52" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <path d="M64 60 Q78 66 90 76" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <circle cx="8" cy="14" r="3" fill="#a78bfa"/>
+          <circle cx="6" cy="30" r="3" fill="#a78bfa"/>
+          <circle cx="8" cy="52" r="3" fill="#a78bfa"/>
+          <circle cx="10" cy="76" r="3" fill="#a78bfa"/>
+          <circle cx="92" cy="14" r="3" fill="#a78bfa"/>
+          <circle cx="94" cy="30" r="3" fill="#a78bfa"/>
+          <circle cx="92" cy="52" r="3" fill="#a78bfa"/>
+          <circle cx="90" cy="76" r="3" fill="#a78bfa"/>
+        </svg>
         <span class="logo-text">LinkSniper</span>
       </div>
       <p class="hero-sub">Bypass semua shortlink dalam satu klik</p>
@@ -69,15 +88,9 @@
         </div>
       </div>
 
-      <div class="mode-selector">
-        <button class="mode-btn active" data-mode="organic" onclick="setMode('organic')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
-          Organic
-        </button>
-        <button class="mode-btn" data-mode="http" onclick="setMode('http')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          HTTP
-        </button>
+      <div class="mode-badge">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        Organic Mode
       </div>
 
       <div id="status" class="status hidden"></div>
@@ -115,7 +128,7 @@
     </main>
 
     <footer>
-      <p>LinkSniper &middot; AI-Powered Bypass Engine</p>
+      <p>LinkSniper &middot; Organic Bypass Engine</p>
     </footer>
   </div>
 

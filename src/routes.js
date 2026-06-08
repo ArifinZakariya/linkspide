@@ -7,14 +7,14 @@ const router = express.Router();
 
 router.post("/resolve", async (req, res) => {
   try {
-    const { url, browser, ai } = req.body;
+    const { url, browser } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
     let parsed;
     try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
 
     const shortener = identifyShortener(parsed.href);
-    const result = await resolveUrl(parsed.href, 15, { useBrowser: browser === true, useAi: ai !== false });
+    const result = await resolveUrl(parsed.href, 15, { useBrowser: browser === true });
 
     res.json({
       original: parsed.href,

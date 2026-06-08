@@ -13,7 +13,6 @@ const ObfuscatedHandler = require("./ObfuscatedHandler");
 const GenericRedirectHandler = require("./GenericRedirectHandler");
 const cloudflareHandler = require("./CloudflareHandler");
 const puppeteerBypass = require("./PuppeteerBypass");
-const aiBypass = require("./AiBypassHandler");
 
 const handlers = [
   new OuoHandler(),
@@ -119,28 +118,6 @@ async function resolveUrl(url, maxDepth = 15, opts = {}) {
               chain.push({ handler: handler.name, extracted: found });
               break;
             }
-          }
-        }
-
-        if (!found && useAi && !aiUsed) {
-          chain.push({ method: "ai", status: "analyzing page..." });
-          try {
-            const aiResult = await aiBypass.resolve(current, html);
-            if (aiResult.success) {
-              chain.push({
-                method: "ai",
-                status: "success",
-                aiMethod: aiResult.method,
-                url: aiResult.url,
-              });
-              current = aiResult.url;
-              aiUsed = true;
-              continue;
-            } else {
-              chain.push({ method: "ai", status: "no URL found" });
-            }
-          } catch (aiErr) {
-            chain.push({ method: "ai", status: "error", error: aiErr.message });
           }
         }
 

@@ -1,12 +1,4 @@
-let currentMode = "organic";
 let resultUrl = null;
-
-function setMode(m) {
-  currentMode = m;
-  document.querySelectorAll(".mode-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.mode === m);
-  });
-}
 
 function el(id) { return document.getElementById(id); }
 function show(id) { el(id).classList.remove("hidden"); }
@@ -44,7 +36,7 @@ function showResult(url) {
   el("finalUrl").textContent = url;
   el("resultTags").innerHTML =
     '<span class="tag tag-service">' + el("detectedName").textContent + '</span>' +
-    '<span class="tag tag-speed">' + currentMode + '</span>' +
+    '<span class="tag tag-speed">organic</span>' +
     '<span class="tag tag-steps">' + el("progressSteps").children.length + ' steps</span>';
   show("result");
 }
@@ -96,19 +88,14 @@ async function resolve() {
   el("logSteps").innerHTML = "";
   const t0 = Date.now();
 
-  const endpoint = currentMode === "organic" ? "/api/organic" : "/api/resolve";
-  const body = currentMode === "organic"
-    ? {url, action:"auto"}
-    : {url};
-
-  appendLog("Mode: " + currentMode.toUpperCase());
+  appendLog("Mode: ORGANIC");
   setProgress(30);
 
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetch("/api/organic", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(body)
+      body: JSON.stringify({url})
     });
     const data = await res.json();
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
