@@ -26,7 +26,14 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev
-RUN chmod -R 755 /root/.cache/puppeteer/ || true
+RUN CHROME_DIR=$(find /root/.cache/puppeteer -type d -name "chrome-linux64" 2>/dev/null | head -1) && \
+    if [ -n "$CHROME_DIR" ]; then \
+      mkdir -p /app/chrome && \
+      cp -r "$CHROME_DIR"/* /app/chrome/ && \
+      chmod -R 755 /app/chrome && \
+      chmod +x /app/chrome/chrome; \
+    fi
+ENV CHROME_PATH=/app/chrome/chrome
 COPY . .
 
 EXPOSE 3000
