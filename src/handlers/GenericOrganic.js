@@ -66,13 +66,9 @@ class GenericOrganic {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-gpu",
-          "--single-process",
-          "--no-zygote",
           "--window-size=1366,768",
           "--disable-blink-features=AutomationControlled",
         ],
-        ignoreHTTPSErrors: true,
-        dumpio: true,
       };
       if (chromePath) {
         log("Chrome: " + chromePath);

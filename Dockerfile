@@ -7,16 +7,6 @@ RUN apt-get update && apt-get install -y \
     fonts-thai-tlwg \
     fonts-kacst \
     fonts-freefont-ttf \
-    libgtk-3-0 \
-    libgbm1 \
-    libasound2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libnss3 \
-    libcups2 \
-    libdrm2 \
-    libatspi2.0-0 \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,9 +15,8 @@ ENV CHROME_PATH=/usr/bin/chromium
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install
 COPY . .
-RUN npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth
 
 EXPOSE 3000
 CMD ["npm", "start"]
