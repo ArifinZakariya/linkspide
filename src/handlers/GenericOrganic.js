@@ -83,8 +83,6 @@ class GenericOrganic {
         log("Browser launch failed: " + launchErr.message);
         return { success: false, error: "Browser launch failed: " + launchErr.message, logs, time: Date.now() - t0 };
       }
-      const launchFn = puppeteerExtra || puppeteer;
-      browser = await launchFn.launch(launchOpts);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1366, height: 768 });
