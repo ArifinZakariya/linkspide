@@ -134,52 +134,75 @@ class GenericOrganic {
   }
 
   async _ouo(page, url, log) {
-    // Step 0: Wait for countdown (OUO countdown is ~5s)
-    await this._waitCountdown(page, 8000);
+    await this._waitCountdown(page, 10000);
 
-    // Step 1: Click button directly
+    log("Waiting for Turnstile token...");
+    const turnstileReady = await this._waitForTurnstile(page, 15000);
+    log("Turnstile ready: " + turnstileReady);
+
     log("Clicking...");
-    await page.evaluate(() => {
-      const btn = document.querySelector("#btn-main");
-      if (btn) btn.click();
-    });
+    await this._click(page);
 
-    // Wait for navigation to /go/
     try {
       await page.waitForFunction(
         () => window.location.href.includes("/go/"),
-        { timeout: 8000 }
+        { timeout: 10000 }
       );
     } catch {}
-    await this._wait(800, 1500);
+    await this._wait(1000, 2000);
 
     let cur = page.url();
     log("Step1: " + cur);
 
     if (cur.includes("/go/")) {
-      // Step 2: Click submit button on second page
+      let html2 = await page.content();
+      let title2 = this._title(html2);
+      log("Page2 title: " + title2);
+
+      if (this._isCloudflare(title2)) {
+        log("CF on page2, waiting...");
+        for (let i = 0; i < 8; i++) {
+          await this._wait(2000, 3000);
+          html2 = await page.content();
+          title2 = this._title(html2);
+          if (!this._isCloudflare(title2)) break;
+        }
+      }
+
+      log("Waiting for Turnstile on page2...");
+      await this._waitForTurnstile(page, 15000);
+
       log("Clicking submit...");
       await this._wait(1000, 1500);
       await this._click(page);
 
       try {
-        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 });
+        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 });
       } catch {}
       await this._wait(1000, 2000);
 
       cur = page.url();
       log("Step2: " + cur);
 
-      // If still on /go/, try form.submit()
       if (cur.includes("/go/")) {
         log("Trying form.submit...");
         await page.evaluate(() => { const f = document.querySelector("form"); if (f) f.submit(); });
-        try { await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 }); } catch {}
+        try { await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
         await this._wait(1000, 2000);
         cur = page.url();
         log("Step2b: " + cur);
       }
     }
+
+    let result = this._finalUrl(page);
+    if (result && !this._isShortlink(result)) return result;
+
+    const htmlFinal = await page.content();
+    const b64 = this._extractB64(htmlFinal);
+    if (b64) return b64;
+
+    const jsRedirect = htmlFinal.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)/);
+    if (jsRedirect && !this._isShortlink(jsRedirect[1])) return jsRedirect[1];
 
     return this._finalUrl(page);
   }
@@ -370,6 +393,25 @@ class GenericOrganic {
         return false;
       });
     } catch { return false; }
+  }
+
+  async _waitForTurnstile(page, timeout) {
+    const s = Date.now();
+    while (Date.now() - s < timeout) {
+      try {
+        const token = await page.evaluate(() => {
+          const el = document.querySelector("#x-token") || document.querySelector('[name="x-token"]');
+          return el ? el.value : null;
+        });
+        if (token && token.length > 10) return true;
+      } catch {}
+      try {
+        const hasTurnstile = await page.evaluate(() => !!document.querySelector(".cf-turnstile, [data-sitekey]"));
+        if (!hasTurnstile) return true;
+      } catch {}
+      await this._wait(500, 800);
+    }
+    return false;
   }
 
   async _waitCountdown(page, timeout) {

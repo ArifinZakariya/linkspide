@@ -116,6 +116,10 @@ class OuoOrganic {
       log("Simulating human behavior (scroll, mouse)...");
       await this._simulateHumanBehavior(page);
 
+      log("Waiting for Turnstile token...");
+      const turnstileReady = await this._waitForTurnstile(page, 15000);
+      log("Turnstile ready: " + turnstileReady);
+
       html = await page.content();
       const hasForm = html.includes("/go/");
       log("Form found: " + hasForm);
@@ -139,7 +143,8 @@ class OuoOrganic {
           log("After click: " + title);
 
           if (html.includes("/go/") || html.includes("/re/")) {
-            log("Second page detected, clicking again...");
+            log("Second page detected, waiting for Turnstile...");
+            await this._waitForTurnstile(page, 15000);
             await this._humanDelay(2000, 3000);
             await this._clickContinueButton(page);
             await this._humanDelay(3000, 5000);
@@ -355,6 +360,25 @@ class OuoOrganic {
       );
       await this._humanDelay(300, 600);
     } catch {}
+  }
+
+  async _waitForTurnstile(page, timeout) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      try {
+        const token = await page.evaluate(() => {
+          const el = document.querySelector("#x-token") || document.querySelector('[name="x-token"]');
+          return el ? el.value : null;
+        });
+        if (token && token.length > 10) return true;
+      } catch {}
+      try {
+        const hasTurnstile = await page.evaluate(() => !!document.querySelector(".cf-turnstile, [data-sitekey]"));
+        if (!hasTurnstile) return true;
+      } catch {}
+      await this._humanDelay(500, 800);
+    }
+    return false;
   }
 
   _humanDelay(min, max) {
