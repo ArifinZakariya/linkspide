@@ -59,14 +59,33 @@ class GenericOrganic {
 
       const chromePath = process.env.CHROME_PATH || this._findChrome();
       const launchOpts = {
-        headless: "new",
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1366,768", "--disable-blink-features=AutomationControlled"],
+        headless: true,
+        executablePath: chromePath || undefined,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--single-process",
+          "--no-zygote",
+          "--window-size=1366,768",
+          "--disable-blink-features=AutomationControlled",
+        ],
+        ignoreHTTPSErrors: true,
+        dumpio: true,
       };
       if (chromePath) {
-        launchOpts.executablePath = chromePath;
         log("Chrome: " + chromePath);
       } else {
         log("No Chrome found. Set CHROME_PATH or run: npx puppeteer browsers install chrome");
+      }
+
+      const launchFn = puppeteerExtra || puppeteer;
+      try {
+        browser = await launchFn.launch(launchOpts);
+      } catch (launchErr) {
+        log("Browser launch failed: " + launchErr.message);
+        return { success: false, error: "Browser launch failed: " + launchErr.message, logs, time: Date.now() - t0 };
       }
       const launchFn = puppeteerExtra || puppeteer;
       browser = await launchFn.launch(launchOpts);
