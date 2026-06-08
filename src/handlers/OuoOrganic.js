@@ -2,6 +2,13 @@ let puppeteer = null;
 try {
   puppeteer = require("puppeteer");
 } catch {}
+let puppeteerExtra = null;
+let StealthPlugin = null;
+try {
+  puppeteerExtra = require("puppeteer-extra");
+  StealthPlugin = require("puppeteer-extra-plugin-stealth");
+  puppeteerExtra.use(StealthPlugin());
+} catch {}
 
 class OuoOrganic {
   get name() {
@@ -56,7 +63,8 @@ class OuoOrganic {
         return null;
       })();
       if (chromePath) launchOpts.executablePath = chromePath;
-      browser = await puppeteer.launch(launchOpts);
+      const launchFn = puppeteerExtra || puppeteer;
+      browser = await launchFn.launch(launchOpts);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1366, height: 768 });

@@ -1,5 +1,12 @@
 let puppeteer = null;
 try { puppeteer = require("puppeteer"); } catch {}
+let puppeteerExtra = null;
+let StealthPlugin = null;
+try {
+  puppeteerExtra = require("puppeteer-extra");
+  StealthPlugin = require("puppeteer-extra-plugin-stealth");
+  puppeteerExtra.use(StealthPlugin());
+} catch {}
 const { load } = require("cheerio");
 const { getClient, followRedirects } = require("../utils/httpClient");
 
@@ -34,7 +41,6 @@ class GenericOrganic {
       const service = this.detectService(url);
       log("Service: " + service.name);
 
-      // FAST PATH: Try HTTP-first for token-decode services
       if (service.strategy === "token-decode") {
         const httpResult = await this._fastHttpDecode(url, log);
         if (httpResult) {
@@ -43,10 +49,18 @@ class GenericOrganic {
         }
       }
 
+      if (service.name === "OUO") {
+        const fbcResult = await this._tryFbcRedirect(url, log);
+        if (fbcResult) {
+          log("FBC redirect: " + (Date.now() - t0) + "ms -> " + fbcResult);
+          return { success: true, url: fbcResult, service: service.name, logs, time: Date.now() - t0 };
+        }
+      }
+
       const chromePath = process.env.CHROME_PATH || this._findChrome();
       const launchOpts = {
         headless: "new",
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1366,768"],
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1366,768", "--disable-blink-features=AutomationControlled"],
       };
       if (chromePath) {
         launchOpts.executablePath = chromePath;
@@ -54,29 +68,48 @@ class GenericOrganic {
       } else {
         log("No Chrome found. Set CHROME_PATH or run: npx puppeteer browsers install chrome");
       }
-      browser = await puppeteer.launch(launchOpts);
+      const launchFn = puppeteerExtra || puppeteer;
+      browser = await launchFn.launch(launchOpts);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1366, height: 768 });
       await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
       await page.evaluateOnNewDocument(() => {
         Object.defineProperty(navigator, "webdriver", { get: () => false });
-        window.chrome = { runtime: {} };
+        window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
+        Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
+        Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
       });
 
       log("Loading...");
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
-      await this._wait(1500, 2500);
+      const navError = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(e => e);
+      if (navError) {
+        log("Nav error: " + navError.message);
+      }
+      await this._wait(2000, 3000);
+
+      let cur = page.url();
+      log("Current URL: " + cur);
+
+      if (cur.includes("chrome-error://")) {
+        log("Chrome error page detected, aborting browser");
+        return { success: false, error: "Chrome cannot reach the URL", logs, time: Date.now() - t0 };
+      }
 
       let html = await page.content();
       let title = this._title(html);
 
       if (this._isCloudflare(title)) {
         log("Cloudflare, waiting...");
-        for (let i = 0; i < 6; i++) {
-          await this._wait(1000, 1500);
+        for (let i = 0; i < 8; i++) {
+          await this._wait(2000, 3000);
           html = await page.content();
           title = this._title(html);
+          cur = page.url();
+          if (cur.includes("chrome-error://")) {
+            log("Chrome error during CF wait");
+            return { success: false, error: "Chrome cannot reach the URL", logs, time: Date.now() - t0 };
+          }
           if (!this._isCloudflare(title)) { log("CF passed!"); break; }
         }
       }
@@ -100,6 +133,65 @@ class GenericOrganic {
     } finally {
       if (browser) try { await browser.close(); } catch {}
     }
+  }
+
+  async _tryFbcRedirect(url, log) {
+    try {
+      const code = url.match(/ouo\.(io|press)\/([A-Za-z0-9]+)/)?.[2];
+      if (!code) return null;
+
+      const client = getClient();
+      const fbcUrl = `https://ouo.io/fbc/${code}`;
+      log("Trying FBC: " + fbcUrl);
+
+      try {
+        await client.get(url, { maxRedirects: 5 });
+      } catch {}
+
+      const res = await client.get(fbcUrl, {
+        maxRedirects: 5,
+        validateStatus: (s) => s < 400 || s === 301 || s === 302 || s === 303,
+      });
+
+      const loc = res.headers?.location;
+      if (loc && !loc.includes("ouo.io")) {
+        return loc.startsWith("http") ? loc : new URL(loc, fbcUrl).href;
+      }
+
+      const body = typeof res.data === "string" ? res.data : "";
+
+      const jsRedirect = body.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)/);
+      if (jsRedirect && !jsRedirect[1].includes("ouo.io")) {
+        return jsRedirect[1];
+      }
+
+      const b64Match = body.match(/aHR0cHM6Ly9[A-Za-z0-9+\/=]+/);
+      if (b64Match) {
+        try {
+          const decoded = Buffer.from(b64Match[0], "base64").toString("utf-8");
+          if (decoded.startsWith("http") && !decoded.includes("ouo.io")) {
+            return decoded;
+          }
+        } catch {}
+      }
+
+      const $ = load(body);
+      const destLink = $("a[href]").filter(function () {
+        const h = $(this).attr("href") || "";
+        return h.startsWith("http") && !h.includes("ouo.io") && !h.includes("google") && !h.includes("facebook");
+      }).first().attr("href");
+      if (destLink) return destLink;
+
+    } catch (err) {
+      log("FBC error: " + err.message);
+      if (err.response?.headers?.location) {
+        const loc = err.response.headers.location;
+        if (!loc.includes("ouo.io")) {
+          return loc.startsWith("http") ? loc : new URL(loc, url).href;
+        }
+      }
+    }
+    return null;
   }
 
   // FAST HTTP: Decode token without Puppeteer
@@ -134,25 +226,30 @@ class GenericOrganic {
   }
 
   async _ouo(page, url, log) {
-    await this._waitCountdown(page, 10000);
+    let cur = page.url();
+    if (cur.includes("chrome-error://")) return null;
 
-    log("Waiting for Turnstile token...");
-    const turnstileReady = await this._waitForTurnstile(page, 15000);
-    log("Turnstile ready: " + turnstileReady);
-
-    log("Clicking...");
-    await this._click(page);
+    log("Submitting form directly via JavaScript...");
+    await page.evaluate(() => {
+      const f = document.querySelector("form");
+      if (f) f.submit();
+    });
 
     try {
       await page.waitForFunction(
-        () => window.location.href.includes("/go/"),
-        { timeout: 10000 }
+        () => {
+          const u = window.location.href;
+          return u.includes("/go/") || !u.includes("ouo.io") || u.includes("chrome-error://");
+        },
+        { timeout: 15000 }
       );
     } catch {}
-    await this._wait(1000, 2000);
+    await this._wait(2000, 3000);
 
-    let cur = page.url();
+    cur = page.url();
     log("Step1: " + cur);
+
+    if (cur.includes("chrome-error://")) return null;
 
     if (cur.includes("/go/")) {
       let html2 = await page.content();
@@ -161,36 +258,37 @@ class GenericOrganic {
 
       if (this._isCloudflare(title2)) {
         log("CF on page2, waiting...");
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 6; i++) {
           await this._wait(2000, 3000);
           html2 = await page.content();
           title2 = this._title(html2);
+          cur = page.url();
+          if (cur.includes("chrome-error://")) return null;
           if (!this._isCloudflare(title2)) break;
         }
       }
 
-      log("Waiting for Turnstile on page2...");
-      await this._waitForTurnstile(page, 15000);
-
-      log("Clicking submit...");
-      await this._wait(1000, 1500);
-      await this._click(page);
-
-      try {
-        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 });
-      } catch {}
-      await this._wait(1000, 2000);
-
-      cur = page.url();
-      log("Step2: " + cur);
-
       if (cur.includes("/go/")) {
-        log("Trying form.submit...");
-        await page.evaluate(() => { const f = document.querySelector("form"); if (f) f.submit(); });
-        try { await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
+        log("Submitting form on page2...");
         await this._wait(1000, 2000);
+        await page.evaluate(() => {
+          const f = document.querySelector("form");
+          if (f) f.submit();
+        });
+
+        try {
+          await page.waitForFunction(
+            () => {
+              const u = window.location.href;
+              return !u.includes("/go/") || u.includes("chrome-error://");
+            },
+            { timeout: 15000 }
+          );
+        } catch {}
+        await this._wait(2000, 3000);
+
         cur = page.url();
-        log("Step2b: " + cur);
+        log("Step2: " + cur);
       }
     }
 
@@ -393,25 +491,6 @@ class GenericOrganic {
         return false;
       });
     } catch { return false; }
-  }
-
-  async _waitForTurnstile(page, timeout) {
-    const s = Date.now();
-    while (Date.now() - s < timeout) {
-      try {
-        const token = await page.evaluate(() => {
-          const el = document.querySelector("#x-token") || document.querySelector('[name="x-token"]');
-          return el ? el.value : null;
-        });
-        if (token && token.length > 10) return true;
-      } catch {}
-      try {
-        const hasTurnstile = await page.evaluate(() => !!document.querySelector(".cf-turnstile, [data-sitekey]"));
-        if (!hasTurnstile) return true;
-      } catch {}
-      await this._wait(500, 800);
-    }
-    return false;
   }
 
   async _waitCountdown(page, timeout) {

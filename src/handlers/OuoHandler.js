@@ -11,53 +11,67 @@ class OuoHandler extends BaseHandler {
   }
 
   async extract($, html, url) {
+    const code = url.match(/\/([A-Za-z0-9]+)$/)?.[1];
+
+    if (url.includes("/re/") || url.includes("/fbc/")) {
+      return null;
+    }
+
     if (html.includes("Just a moment") || html.includes("cf-browser-verification")) {
-      const code = url.match(/\/([A-Za-z0-9]+)$/)?.[1];
       if (code) {
         return {
-          redirect: `https://ouo.io/re/${code}`,
-          note: "cloudflare-challenge",
+          redirect: `https://ouo.io/fbc/${code}`,
+          note: "cloudflare-challenge-via-fbc",
         };
       }
     }
 
-    const hasTurnstile = html.includes("cf-turnstile") || html.includes('data-sitekey');
+    const hasTurnstile = html.includes("cf-turnstile") || html.includes("data-sitekey");
     if (hasTurnstile) {
-      const code = url.match(/\/([A-Za-z0-9]+)$/)?.[1];
       if (code) {
         return {
-          redirect: `https://ouo.io/re/${code}`,
-          note: "turnstile-detected",
+          redirect: `https://ouo.io/fbc/${code}`,
+          note: "turnstile-detected-via-fbc",
         };
       }
     }
 
     const form = $('form[action*="/go/"]').first();
-    if (!form.length) {
-      const altForm = $("form").first();
-      if (altForm.length) {
-        const action = altForm.attr("action");
-        const token = altForm.find('input[name="_token"]').val();
-        if (action && token) {
-          return this._submitForm(url, action, {
-            _token: token,
-            "x-token": altForm.find('input[name="x-token"]').val() || "",
-            "v-token": altForm.find('input[name="v-token"]').val() || "vm",
-          });
-        }
+    if (form.length) {
+      const action = form.attr("action");
+      const token = form.find('input[name="_token"]').val();
+      if (action && token) {
+        const result = await this._submitForm(url, action, {
+          _token: token,
+          "x-token": form.find('input[name="x-token"]').val() || "",
+          "v-token": form.find('input[name="v-token"]').val() || "vm",
+        });
+        if (result) return result;
       }
-      return null;
     }
 
-    const action = form.attr("action");
-    const token = form.find('input[name="_token"]').val();
-    if (!action || !token) return null;
+    const altForm = $("form").first();
+    if (altForm.length) {
+      const action = altForm.attr("action");
+      const token = altForm.find('input[name="_token"]').val();
+      if (action && token) {
+        const result = await this._submitForm(url, action, {
+          _token: token,
+          "x-token": altForm.find('input[name="x-token"]').val() || "",
+          "v-token": altForm.find('input[name="v-token"]').val() || "vm",
+        });
+        if (result) return result;
+      }
+    }
 
-    return this._submitForm(url, action, {
-      _token: token,
-      "x-token": form.find('input[name="x-token"]').val() || "",
-      "v-token": form.find('input[name="v-token"]').val() || "vm",
-    });
+    if (code) {
+      return {
+        redirect: `https://ouo.io/fbc/${code}`,
+        note: "fallback-to-fbc",
+      };
+    }
+
+    return null;
   }
 
   async _submitForm(pageUrl, action, formData) {
@@ -86,14 +100,19 @@ class OuoHandler extends BaseHandler {
 
       const body = typeof res.data === "string" ? res.data : "";
 
-      if (body.includes("Just a moment") || body.includes("cf-turnstile")) {
-        const code = pageUrl.match(/\/([A-Za-z0-9]+)$/)?.[1];
-        if (code) return { redirect: `https://ouo.io/re/${code}` };
+      const b64Match = body.match(/aHR0cHM6Ly9[A-Za-z0-9+\/=]+/);
+      if (b64Match) {
+        try {
+          const decoded = Buffer.from(b64Match[0], "base64").toString("utf-8");
+          if (decoded.startsWith("http") && !decoded.includes("ouo.io")) {
+            return { redirect: decoded };
+          }
+        } catch {}
       }
 
-      if (res.status === 403 || body.includes("cf-turnstile") || body.includes("x-token")) {
-        const code = pageUrl.match(/\/([A-Za-z0-9]+)$/)?.[1];
-        if (code) return { redirect: `https://ouo.io/re/${code}` };
+      const jsRedirect = body.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)/);
+      if (jsRedirect && !jsRedirect[1].includes("ouo.io")) {
+        return { redirect: jsRedirect[1] };
       }
 
       const $2 = require("cheerio").load(body);
@@ -124,9 +143,14 @@ class OuoHandler extends BaseHandler {
             if (loc2) return { redirect: loc2.startsWith("http") ? loc2 : new URL(loc2, fullAction).href };
 
             const body2 = typeof res2.data === "string" ? res2.data : "";
-            if (body2.includes("cf-turnstile") || res2.status === 403) {
-              const code2 = pageUrl.match(/\/([A-Za-z0-9]+)$/)?.[1];
-              if (code2) return { redirect: `https://ouo.io/re/${code2}` };
+            const b64_2 = body2.match(/aHR0cHM6Ly9[A-Za-z0-9+\/=]+/);
+            if (b64_2) {
+              try {
+                const decoded2 = Buffer.from(b64_2[0], "base64").toString("utf-8");
+                if (decoded2.startsWith("http") && !decoded2.includes("ouo.io")) {
+                  return { redirect: decoded2 };
+                }
+              } catch {}
             }
           } catch (e2) {
             if (e2.response?.headers?.location) {
@@ -135,24 +159,10 @@ class OuoHandler extends BaseHandler {
           }
         }
       }
-
-      const jsRedirect = body.match(/window\.location(?:\.href)?\s*=\s*["']([^"']+)/);
-      if (jsRedirect) return { redirect: jsRedirect[1] };
-
-      const b64Match = body.match(/aHR0cHM6Ly9[A-Za-z0-9+\/=]+/);
-      if (b64Match) {
-        try {
-          const decoded = Buffer.from(b64Match[0], "base64").toString("utf-8");
-          if (decoded.startsWith("http")) return { redirect: decoded };
-        } catch {}
-      }
     } catch (err) {
       if (err.response?.headers?.location) {
         return { redirect: err.response.headers.location };
       }
-
-      const code = pageUrl.match(/\/([A-Za-z0-9]+)$/)?.[1];
-      if (code) return { redirect: `https://ouo.io/re/${code}` };
     }
 
     return null;
