@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev
+RUN chmod -R 755 /root/.cache/puppeteer/ || true
 COPY . .
 
 EXPOSE 3000
