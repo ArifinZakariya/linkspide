@@ -26,7 +26,7 @@ class OuoOrganic {
     };
 
     try {
-      browser = await puppeteer.launch({
+      const launchOpts = {
         headless: "new",
         args: [
           "--no-sandbox",
@@ -37,7 +37,8 @@ class OuoOrganic {
           "--disable-blink-features=AutomationControlled",
           "--lang=en-US,en",
         ],
-      });
+      if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
+      browser = await puppeteer.launch(launchOpts);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1366, height: 768 });

@@ -19,7 +19,7 @@ class PuppeteerBypass {
 
     let browser = null;
     try {
-      browser = await puppeteer.launch({
+      const launchOpts = {
         headless: "new",
         args: [
           "--no-sandbox",
@@ -29,7 +29,9 @@ class PuppeteerBypass {
           "--window-size=1920,1080",
           "--disable-blink-features=AutomationControlled",
         ],
-      });
+      };
+      if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
+      browser = await puppeteer.launch(launchOpts);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1920, height: 1080 });

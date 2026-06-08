@@ -43,10 +43,12 @@ class GenericOrganic {
         }
       }
 
-      browser = await puppeteer.launch({
+      const launchOpts = {
         headless: "new",
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1366,768"],
-      });
+      };
+      if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
+      browser = await puppeteer.launch(launchOpts);
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1366, height: 768 });
