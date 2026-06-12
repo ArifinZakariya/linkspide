@@ -50,9 +50,16 @@ function copyResult() {
   });
 }
 
+function normalizeUrl(raw) {
+  let url = raw.trim();
+  if (url && !/^[a-zA-Z]+:\/\//.test(url)) url = "https://" + url;
+  return url;
+}
+
 async function resolve() {
-  const url = el("urlInput").value.trim();
+  let url = normalizeUrl(el("urlInput").value);
   if (!url) { el("urlInput").focus(); return; }
+  el("urlInput").value = url;
 
   const btn = el("resolveBtn");
   btn.disabled = true;
@@ -126,7 +133,7 @@ async function resolve() {
 el("urlInput").addEventListener("keydown", e => { if (e.key === "Enter") resolve(); });
 
 el("urlInput").addEventListener("input", async () => {
-  const url = el("urlInput").value.trim();
+  const url = normalizeUrl(el("urlInput").value);
   if (url.length > 10) {
     try {
       const r = await fetch("/api/check", {
