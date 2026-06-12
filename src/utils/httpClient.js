@@ -1,19 +1,26 @@
 const axios = require("axios");
-const { load } = require("cheerio");
+const http = require("http");
+const https = require("https");
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-const MOBILE_UA =
-  "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36";
+
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 30 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 30 });
+
+let _client = null;
 
 function getClient(opts = {}) {
-  const ua = opts.mobile ? MOBILE_UA : DESKTOP_UA;
-  return axios.create({
-    timeout: 20000,
+  if (_client && !opts.mobile) return _client;
+
+  const client = axios.create({
+    timeout: opts.timeout || 8000,
     maxRedirects: 0,
     validateStatus: (s) => (s >= 200 && s < 400) || s === 403,
+    httpAgent,
+    httpsAgent,
     headers: {
-      "User-Agent": ua,
+      "User-Agent": DESKTOP_UA,
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
@@ -26,24 +33,28 @@ function getClient(opts = {}) {
       "Sec-Fetch-User": "?1",
       "Cache-Control": "max-age=0",
     },
-    ...opts,
   });
+
+  if (!opts.mobile) _client = client;
+  return client;
 }
 
 async function followRedirects(url, maxSteps = 10) {
   const steps = [];
   let current = url;
   let cookies = {};
+  const client = getClient();
 
   for (let i = 0; i < maxSteps; i++) {
     try {
-      const client = getClient();
       const cookieStr = Object.entries(cookies)
         .map(([k, v]) => `${k}=${v}`)
         .join("; ");
-      if (cookieStr) client.defaults.headers.Cookie = cookieStr;
 
-      const res = await client.get(current);
+      const headers = {};
+      if (cookieStr) headers.Cookie = cookieStr;
+
+      const res = await client.get(current, { headers });
       const status = res.status;
       const location = res.headers?.location;
 

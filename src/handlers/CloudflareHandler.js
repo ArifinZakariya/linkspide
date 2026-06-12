@@ -1,7 +1,4 @@
-let puppeteer = null;
-try {
-  puppeteer = require("puppeteer");
-} catch {}
+const { getClient } = require("../utils/httpClient");
 
 class CloudflareHandler {
   get name() {
@@ -22,78 +19,33 @@ class CloudflareHandler {
   }
 
   async bypass(url, opts = {}) {
-    if (!puppeteer) {
-      return {
-        success: false,
-        error: "Puppeteer not installed. Run: npm install puppeteer",
-      };
-    }
-
-    let browser = null;
     try {
-      const fs = require("fs");
-      const launchOpts = {
-        headless: "new",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--window-size=1920,1080",
-        ],
-      };
-      const chromePath = process.env.CHROME_PATH || (() => {
-        const paths = [
-          "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
-          "/usr/bin/chromium-browser", "/usr/bin/chromium",
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          process.env.LOCALAPPDATA + "\\Google\\Chrome\\Application\\chrome.exe",
-          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        ];
-        for (const p of paths) { try { if (require("fs").existsSync(p)) return p; } catch {} }
-        try {
-          const r = require("child_process").execSync('find ~/.cache/puppeteer/chrome -name "chrome" -o -name "chrome.exe" 2>/dev/null | head -1', { encoding: "utf-8" }).trim();
-          if (r) return r;
-        } catch {}
-        return null;
-      })();
-      if (chromePath) launchOpts.executablePath = chromePath;
-      browser = await puppeteer.launch(launchOpts);
+      const client = getClient();
+      const res = await client.get(url, {
+        maxRedirects: 10,
+        timeout: 15000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        },
+      });
 
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1920, height: 1080 });
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-      );
+      const finalUrl = res.request?.res?.responseUrl || url;
+      const html = typeof res.data === "string" ? res.data : "";
 
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
-
-      await page.waitForFunction(
-        () => !document.title.includes("Just a moment"),
-        { timeout: 15000 }
-      ).catch(() => {});
-
-      const currentUrl = page.url();
-      const html = await page.content();
-
-      if (html.includes("Just a moment")) {
+      if (this.isCloudflarePage(html)) {
         return {
           success: false,
-          url: currentUrl,
-          error: "Cloudflare challenge could not be solved automatically",
+          url: finalUrl,
+          error: "Cloudflare challenge detected - cannot bypass via HTTP alone",
         };
       }
 
-      return {
-        success: true,
-        url: currentUrl,
-        html,
-      };
+      return { success: true, url: finalUrl, html };
     } catch (err) {
+      if (err.response?.headers?.location) {
+        return { success: true, url: err.response.headers.location };
+      }
       return { success: false, error: err.message };
-    } finally {
-      if (browser) await browser.close();
     }
   }
 }

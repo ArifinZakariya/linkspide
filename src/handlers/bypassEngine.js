@@ -1,5 +1,5 @@
 const { load } = require("cheerio");
-const { followRedirects, getClient } = require("../utils/httpClient");
+const { followRedirects } = require("../utils/httpClient");
 const { identifyShortener } = require("./registry");
 
 const OuoHandler = require("./OuoHandler");
@@ -11,8 +11,7 @@ const CountdownHandler = require("./CountdownHandler");
 const TokenBypassHandler = require("./TokenBypassHandler");
 const ObfuscatedHandler = require("./ObfuscatedHandler");
 const GenericRedirectHandler = require("./GenericRedirectHandler");
-const cloudflareHandler = require("./CloudflareHandler");
-const puppeteerBypass = require("./PuppeteerBypass");
+const livewireHandler = require("./LivewireHandler");
 
 const handlers = [
   new OuoHandler(),
@@ -25,6 +24,8 @@ const handlers = [
   new ObfuscatedHandler(),
   new GenericRedirectHandler(),
 ];
+
+const OVERALL_TIMEOUT = 25000;
 
 async function decodeToken(url, token) {
   if (!token) return null;
@@ -55,8 +56,7 @@ async function decodeToken(url, token) {
   return null;
 }
 
-async function submitForm(action, formData, referer) {
-  const client = getClient();
+async function submitForm(action, formData, referer, client) {
   try {
     const params = new URLSearchParams(formData);
     const res = await client.post(action, params.toString(), {
@@ -77,15 +77,19 @@ async function submitForm(action, formData, referer) {
   }
 }
 
-async function resolveUrl(url, maxDepth = 15, opts = {}) {
-  const { useBrowser = false, useAi = true } = opts;
+async function resolveUrl(url, maxDepth = 15) {
   const chain = [];
   let current = url;
   const visited = new Set();
   let cloudflareDetected = false;
-  let aiUsed = false;
+  const startTime = Date.now();
 
   for (let depth = 0; depth < maxDepth; depth++) {
+    if (Date.now() - startTime > OVERALL_TIMEOUT) {
+      chain.push({ note: "Overall timeout reached", final: true });
+      break;
+    }
+
     if (visited.has(current)) {
       chain.push({ url: current, status: "loop-detected", final: true });
       break;
@@ -96,6 +100,19 @@ async function resolveUrl(url, maxDepth = 15, opts = {}) {
     chain.push({ url: current, shortener: shortener || "Unknown" });
 
     try {
+      const isLivewire = livewireHandler.canHandle(current);
+
+      if (isLivewire) {
+        chain.push({ method: "livewire", status: "attempting direct Livewire bypass" });
+        const lwResult = await livewireHandler.solve(current, (m) => chain.push({ log: m }));
+        if (lwResult.success && lwResult.url) {
+          chain.push({ method: "livewire", status: "success", url: lwResult.url });
+          current = lwResult.url;
+          continue;
+        }
+        chain.push({ method: "livewire", status: "failed", error: lwResult.error || "No link captured" });
+      }
+
       const { finalUrl, steps, html } = await followRedirects(current);
       chain.push(...steps.map((s) => ({ ...s, shortener: shortener || "Unknown" })));
 
@@ -122,20 +139,8 @@ async function resolveUrl(url, maxDepth = 15, opts = {}) {
         }
 
         if (!found) {
-          if (isCf && useBrowser && puppeteerBypass.isAvailable()) {
-            chain.push({ method: "puppeteer", status: "attempting browser bypass" });
-            const result = await puppeteerBypass.autoBypass(current);
-            if (result.success) {
-              chain.push({ method: "puppeteer", status: "success", url: result.url });
-              current = result.url;
-              continue;
-            } else {
-              chain.push({ method: "puppeteer", status: "failed", error: result.error });
-            }
-          }
-
           if (cloudflareDetected) {
-            chain.push({ note: "Cloudflare detected - enable AI or Browser Mode", final: true });
+            chain.push({ note: "Cloudflare detected - cannot bypass via HTTP", final: true });
           } else {
             chain.push({ final: true });
           }
@@ -158,10 +163,12 @@ async function resolveUrl(url, maxDepth = 15, opts = {}) {
           }
 
           try {
+            const { getClient } = require("../utils/httpClient");
+            const client = getClient();
             const postUrl = found.formAction.startsWith("http")
               ? found.formAction
               : new URL(found.formAction, current).href;
-            const formRes = await submitForm(postUrl, found.formData, current);
+            const formRes = await submitForm(postUrl, found.formData, current, client);
             const loc = formRes.headers?.location;
             if (loc) {
               current = loc.startsWith("http") ? loc : new URL(loc, postUrl).href;

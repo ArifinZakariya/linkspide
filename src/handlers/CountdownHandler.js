@@ -6,7 +6,7 @@ class CountdownHandler extends BaseHandler {
   }
 
   canHandle(url) {
-    return true;
+    return /countdown|timer|wait|redirect|skip/i.test(url);
   }
 
   async extract($, html, url) {

@@ -50,20 +50,6 @@ class OuoHandler extends BaseHandler {
       }
     }
 
-    const altForm = $("form").first();
-    if (altForm.length) {
-      const action = altForm.attr("action");
-      const token = altForm.find('input[name="_token"]').val();
-      if (action && token) {
-        const result = await this._submitForm(url, action, {
-          _token: token,
-          "x-token": altForm.find('input[name="x-token"]').val() || "",
-          "v-token": altForm.find('input[name="v-token"]').val() || "vm",
-        });
-        if (result) return result;
-      }
-    }
-
     if (code) {
       return {
         redirect: `https://ouo.io/fbc/${code}`,
@@ -76,7 +62,7 @@ class OuoHandler extends BaseHandler {
 
   async _submitForm(pageUrl, action, formData) {
     try {
-      const client = getClient();
+      const client = getClient({ timeout: 8000 });
       const postUrl = action.startsWith("http") ? action : new URL(action, pageUrl).href;
 
       const res = await client.post(

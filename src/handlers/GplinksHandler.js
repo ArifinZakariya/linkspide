@@ -21,7 +21,7 @@ class GplinksHandler extends BaseHandler {
 
       if (action && Object.keys(formData).length > 0) {
         try {
-          const client = getClient();
+          const client = getClient({ timeout: 8000 });
           const postUrl = action.startsWith("http") ? action : new URL(action, url).href;
           const res = await client.post(
             postUrl,
@@ -54,7 +54,7 @@ class GplinksHandler extends BaseHandler {
       }
     }
 
-    const goBtn = $('a[href*="/go/"], a[href*="/link/"], button:contains("Get Link"), button:contains("Continue")').first().attr("href");
+    const goBtn = $('a[href*="/go/"], a[href*="/link/"]').first().attr("href");
     if (goBtn) return { redirect: goBtn };
 
     return null;
