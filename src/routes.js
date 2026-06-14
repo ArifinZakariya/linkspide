@@ -2,6 +2,7 @@ const express = require("express");
 const { resolveUrl } = require("./handlers/bypassEngine");
 const { identifyShortener } = require("./handlers/registry");
 const genericOrganic = require("./handlers/GenericOrganic");
+const videoDownloader = require("./services/videoDownloader");
 
 const router = express.Router();
 
@@ -78,6 +79,38 @@ router.post("/check", (req, res) => {
     const service = genericOrganic.detectService(url);
     res.json({ url, valid, known: !!shortener, service: shortener || service?.name || "Unknown", shortener: shortener || "Unknown", detectedService: service?.name || "Unknown" });
   } catch { res.status(400).json({ error: "Invalid URL" }); }
+});
+
+// ---- Video Download ----
+
+router.post("/video/info", async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL is required" });
+
+    let parsed;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
+
+    const info = await withTimeout(videoDownloader.getInfo(parsed.href), API_TIMEOUT);
+    res.json({ success: true, ...info });
+  } catch (err) {
+    const msg = err.message?.includes("timeout") ? "Request timed out" : err.message;
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+router.get("/video/download", (req, res) => {
+  const { url, format, ext, audio } = req.query;
+  if (!url) return res.status(400).json({ error: "URL is required" });
+
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
+
+  videoDownloader.streamDownload(
+    parsed.href,
+    { format, ext, audioOnly: audio === "1" || audio === "true" },
+    res
+  );
 });
 
 module.exports = router;

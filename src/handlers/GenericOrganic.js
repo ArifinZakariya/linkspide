@@ -1,6 +1,26 @@
 const { load } = require("cheerio");
 const { getClient, followRedirects } = require("../utils/httpClient");
 
+const PUPPETEER_SERVICE_URL = process.env.PUPPETEER_SERVICE_URL || "";
+
+async function callPuppeteerService(url, timeout = 30000) {
+  if (!PUPPETEER_SERVICE_URL) return null;
+  try {
+    const client = getClient({ timeout: timeout + 5000 });
+    const res = await client.post(`${PUPPETEER_SERVICE_URL}/api/bypass`, {
+      url,
+      strategy: "livewire",
+      timeout,
+    }, {
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.data;
+  } catch (err) {
+    console.log("[PUPPETEER-SERVICE]", err.message);
+    return null;
+  }
+}
+
 const SERVICE_MAP = [
   { name: "OUO", match: /ouo\.(io|press)/, strategy: "ouo", fast: true },
   { name: "TPI", match: /tpi\.(li|ac)|srtam\.com/, strategy: "token-decode", fast: true },
@@ -260,6 +280,16 @@ class GenericOrganic {
         !h.includes("facebook");
     }).first().attr("href");
     if (link) return link;
+
+    if (PUPPETEER_SERVICE_URL) {
+      log("HTTP failed, calling Puppeteer service...");
+      const result = await callPuppeteerService(url);
+      if (result && result.success && result.url) {
+        log("Puppeteer service returned: " + result.url);
+        return result.url;
+      }
+      log("Puppeteer service failed: " + (result?.error || "unknown"));
+    }
 
     return null;
   }

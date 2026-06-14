@@ -2,6 +2,26 @@ const { getClient } = require("../utils/httpClient");
 const { load } = require("cheerio");
 const BaseHandler = require("./BaseHandler");
 
+const PUPPETEER_SERVICE_URL = process.env.PUPPETEER_SERVICE_URL || "";
+
+async function callPuppeteerService(url, timeout = 30000) {
+  if (!PUPPETEER_SERVICE_URL) return null;
+  try {
+    const client = getClient({ timeout: timeout + 5000 });
+    const res = await client.post(`${PUPPETEER_SERVICE_URL}/api/bypass`, {
+      url,
+      strategy: "livewire",
+      timeout,
+    }, {
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.data;
+  } catch (err) {
+    console.log("[PUPPETEER-SERVICE]", err.message);
+    return null;
+  }
+}
+
 class LivewireHandler extends BaseHandler {
   get name() { return "livewire"; }
 
@@ -24,9 +44,7 @@ class LivewireHandler extends BaseHandler {
       const client = getClient({ timeout: 10000 });
 
       log?.("Fetching: " + url);
-      const res = await client.get(url, {
-        maxRedirects: 5,
-      });
+      const res = await client.get(url, { maxRedirects: 5 });
 
       const html = typeof res.data === "string" ? res.data : "";
       const finalUrl = res.request?.res?.responseUrl || url;
@@ -44,42 +62,18 @@ class LivewireHandler extends BaseHandler {
         return { success: true, url: extracted };
       }
 
-      const ajaxUrl = finalUrl;
-      const setLinkUrl = finalUrl.replace(/\/+$/, "") + "/setLink";
-
-      const [ajaxResult, apiResult] = await Promise.allSettled([
-        client.get(ajaxUrl, {
-          maxRedirects: 3,
-          headers: {
-            "X-Requested-With": "XMLHttpRequest",
-            "Accept": "text/html, */*; q=0.01",
-            "Referer": url,
-          },
-        }),
-        client.post(setLinkUrl, "", {
-          maxRedirects: 3,
-          headers: {
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "application/json",
-            "Referer": finalUrl,
-          },
-          timeout: 5000,
-        }),
-      ]);
-
-      for (const result of [ajaxResult, apiResult]) {
-        if (result.status === "fulfilled") {
-          const body = typeof result.value.data === "string" ? result.value.data : JSON.stringify(result.value.data || "");
-          const found = this._extractFromHtml(body);
-          if (found) {
-            log?.("Extracted from parallel request: " + found);
-            return { success: true, url: found };
-          }
+      if (PUPPETEER_SERVICE_URL) {
+        log?.("Calling Puppeteer service...");
+        const result = await callPuppeteerService(finalUrl);
+        if (result && result.success && result.url) {
+          log?.("Puppeteer service returned: " + result.url);
+          return { success: true, url: result.url };
         }
+        log?.("Puppeteer service failed: " + (result?.error || "unknown"));
       }
 
       log?.("Could not extract destination link");
-      return { success: false, error: "Could not extract destination link", elapsed: Date.now() - t0 };
+      return { success: false, error: "Could not extract destination link (set PUPPETEER_SERVICE_URL for JS-based bypass)", elapsed: Date.now() - t0 };
     } catch (err) {
       log?.("Error: " + err.message);
       return { success: false, error: err.message };

@@ -1,0 +1,20 @@
+{
+  "name": "shortlink-puppeteer-service",
+  "version": "1.0.0",
+  "description": "Puppeteer microservice for JS-heavy shortlink bypass",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "puppeteer-core": "^22.15.0"
+  },
+  "optionalDependencies": {
+    "puppeteer": "^22.15.0"
+  }
+}
