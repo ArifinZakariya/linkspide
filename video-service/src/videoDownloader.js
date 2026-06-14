@@ -75,7 +75,7 @@ function runYtDlp(args, { timeout = 60000 } = {}) {
   });
 }
 
-function baseArgs() {
+function baseArgs(platform) {
   const args = ["--no-playlist", "--no-warnings", "--user-agent", UA];
   if (hasCookies()) {
     args.push("--cookies", COOKIES_FILE);
@@ -136,7 +136,7 @@ async function getInfo(rawUrl) {
     );
   }
 
-  const args = [...baseArgs(), "--dump-single-json", rawUrl];
+  const args = [...baseArgs(platform), "--dump-single-json", rawUrl];
   const out = await runYtDlp(args, { timeout: 45000 });
 
   let info;
@@ -177,7 +177,7 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
   const mime = audioOnly ? "audio/mpeg" : "video/mp4";
   const safeName = `${platform.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.${fileExt}`;
 
-  const args = [...baseArgs(), "-o", tmpFile];
+  const args = [...baseArgs(platform), "-o", tmpFile];
 
   if (audioOnly) {
     args.push("-f", format || "bestaudio/best");
