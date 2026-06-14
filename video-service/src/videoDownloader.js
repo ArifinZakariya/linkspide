@@ -145,6 +145,11 @@ async function getInfo(rawUrl) {
 }
 
 // Stream a download directly to the HTTP response.
+// yt-dlp can't merge to stdout, so we download to a temp file first.
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
 function streamDownload(rawUrl, { format, audioOnly }, res) {
   const platform = detectPlatform(rawUrl);
   if (!platform) {
@@ -152,7 +157,12 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
     return;
   }
 
-  const args = [...baseArgs(), "-o", "-"]; // output to stdout
+  const tmpFile = path.join(os.tmpdir(), `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const fileExt = audioOnly ? "mp3" : "mp4";
+  const mime = audioOnly ? "audio/mpeg" : "video/mp4";
+  const safeName = `${platform.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.${fileExt}`;
+
+  const args = [...baseArgs(), "-o", tmpFile];
 
   if (audioOnly) {
     args.push("-f", format || "bestaudio/best");
@@ -164,43 +174,51 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
 
   args.push(rawUrl);
 
-  const safeName = `${platform.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
-  const fileExt = audioOnly ? "mp3" : "mp4";
-  const mime = audioOnly ? "audio/mpeg" : "video/mp4";
-
-  res.setHeader("Content-Type", mime);
-  res.setHeader("Content-Disposition", `attachment; filename="${safeName}.${fileExt}"`);
-
   const child = spawn(YTDLP, args, { windowsHide: true });
   let stderr = "";
   let responded = false;
 
-  child.stdout.pipe(res);
   child.stderr.on("data", (d) => (stderr += d.toString()));
 
   child.on("error", (err) => {
     if (responded) return;
     responded = true;
-    if (!res.headersSent) {
-      const msg = err.code === "ENOENT" ? "yt-dlp tidak ditemukan di server" : err.message;
-      res.status(500).json({ error: msg });
-    } else {
-      res.end();
-    }
+    const msg = err.code === "ENOENT" ? "yt-dlp tidak ditemukan di server" : err.message;
+    if (!res.headersSent) res.status(500).json({ error: msg });
+    else res.end();
+    cleanup();
   });
 
   child.on("close", (code) => {
-    if (code !== 0 && !res.headersSent && !responded) {
+    if (responded) return;
+    if (code !== 0) {
       responded = true;
       const msg = stderr.split("\n").filter(Boolean).pop() || "Download gagal";
-      res.status(500).json({ error: msg.replace(/^ERROR:\s*/i, "") });
-    } else {
-      res.end();
+      if (!res.headersSent) res.status(500).json({ error: msg.replace(/^ERROR:\s*/i, "") });
+      else res.end();
+      cleanup();
+      return;
     }
+
+    // File ready, stream it
+    const stat = fs.statSync(tmpFile);
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+
+    const stream = fs.createReadStream(tmpFile);
+    stream.pipe(res);
+    stream.on("end", cleanup);
+    stream.on("error", () => { res.end(); cleanup(); });
   });
+
+  function cleanup() {
+    try { fs.unlinkSync(tmpFile); } catch {}
+  }
 
   res.on("close", () => {
     if (!child.killed) child.kill("SIGKILL");
+    cleanup();
   });
 }
 
