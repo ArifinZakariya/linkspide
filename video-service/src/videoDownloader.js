@@ -215,19 +215,64 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
       return;
     }
 
-    const stat = fs.statSync(tmpFile);
+    // yt-dlp may append an extension (e.g. tmpFile.mp4) after merge/convert.
+    const actualFile = resolveOutputFile(tmpFile);
+    if (!actualFile) {
+      responded = true;
+      if (!res.headersSent) res.status(500).json({ error: "Output file tidak ditemukan setelah download" });
+      else res.end();
+      cleanup();
+      return;
+    }
+
+    let stat;
+    try {
+      stat = fs.statSync(actualFile);
+    } catch (e) {
+      responded = true;
+      if (!res.headersSent) res.status(500).json({ error: "Gagal membaca file output" });
+      else res.end();
+      cleanup();
+      return;
+    }
+
     res.setHeader("Content-Type", mime);
     res.setHeader("Content-Length", stat.size);
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
 
-    const stream = fs.createReadStream(tmpFile);
+    const stream = fs.createReadStream(actualFile);
     stream.pipe(res);
     stream.on("end", cleanup);
     stream.on("error", () => { res.end(); cleanup(); });
   });
 
+  // Find the file yt-dlp actually wrote. It may be `tmpFile`, `tmpFile.mp4`,
+  // `tmpFile.mp3`, or any sibling with the same base name.
+  function resolveOutputFile(base) {
+    if (fs.existsSync(base)) return base;
+    for (const ext of ["mp4", "mp3", "mkv", "webm", "m4a"]) {
+      const candidate = `${base}.${ext}`;
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    try {
+      const dir = path.dirname(base);
+      const prefix = path.basename(base);
+      const match = fs.readdirSync(dir).find((f) => f.startsWith(prefix));
+      if (match) return path.join(dir, match);
+    } catch {}
+    return null;
+  }
+
   function cleanup() {
-    try { fs.unlinkSync(tmpFile); } catch {}
+    try {
+      const dir = path.dirname(tmpFile);
+      const prefix = path.basename(tmpFile);
+      for (const f of fs.readdirSync(dir)) {
+        if (f.startsWith(prefix)) {
+          try { fs.unlinkSync(path.join(dir, f)); } catch {}
+        }
+      }
+    } catch {}
   }
 
   res.on("close", () => {
