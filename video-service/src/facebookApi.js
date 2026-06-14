@@ -224,7 +224,7 @@ async function fetchFromEmbed(embedUrl, videoId) {
     duration: null,
     thumbnail,
     videoUrl,
-    formats: [
+    qualities: [
       {
         quality: "Best",
         height: 720,

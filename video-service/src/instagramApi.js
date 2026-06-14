@@ -116,7 +116,7 @@ async function getReelInfo(url) {
     thumbnail: imageUrl,
     videoUrl,
     imageUrl,
-    formats: [
+    qualities: [
       {
         quality: "Best",
         height: item.video_versions ? item.video_versions[0].height : 720,

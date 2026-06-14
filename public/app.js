@@ -200,10 +200,10 @@ async function fetchVideo() {
     el("videoTags").innerHTML =
       '<span class="tag tag-service">' + d.platform + '</span>' +
       (d.shorts ? '<span class="tag tag-speed">Shorts</span>' : '') +
-      '<span class="tag tag-steps">' + d.qualities.length + ' format</span>';
+      '<span class="tag tag-steps">' + (d.qualities || d.formats || []).length + ' format</span>';
 
     videoDownloadBase = d.downloadBase || "";
-    renderQualities(url, d.qualities);
+    renderQualities(url, d.qualities || d.formats || []);
     show("videoResult");
     setVideoStatus("", "");
   } catch (e) {
