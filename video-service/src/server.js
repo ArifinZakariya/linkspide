@@ -1,19 +1,21 @@
 const express = require("express");
 const videoDownloader = require("./videoDownloader");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3002;
 const API_TIMEOUT = 60000;
+const COOKIES_FILE = process.env.COOKIES_FILE || "/app/cookies.txt";
 
 // CORS: allow the main app (Vercel) to call this service.
-// Set ALLOWED_ORIGIN to your frontend origin, or leave unset for "*".
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -28,10 +30,41 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+// Health check + cookies status
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", service: "video", platforms: videoDownloader.SUPPORTED.map((s) => s.name) });
+  const cookies = videoDownloader.hasCookies();
+  res.json({
+    status: "ok",
+    service: "video",
+    platforms: videoDownloader.SUPPORTED.map((s) => ({
+      name: s.name,
+      needsAuth: s.needsAuth,
+    })),
+    cookies,
+  });
 });
 
+// Upload cookies.txt (text content in JSON body)
+app.put("/api/cookies", (req, res) => {
+  const { content } = req.body;
+  if (!content || typeof content !== "string") {
+    return res.status(400).json({ error: "content (Netscape cookies text) is required" });
+  }
+  try {
+    fs.writeFileSync(COOKIES_FILE, content, "utf-8");
+    res.json({ success: true, message: "Cookies saved", path: COOKIES_FILE });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check cookies status
+app.get("/api/cookies", (req, res) => {
+  const exists = videoDownloader.hasCookies();
+  res.json({ exists, path: COOKIES_FILE });
+});
+
+// Video info
 app.post("/api/video/info", async (req, res) => {
   try {
     const { url } = req.body;
@@ -48,6 +81,7 @@ app.post("/api/video/info", async (req, res) => {
   }
 });
 
+// Video download (stream)
 app.get("/api/video/download", (req, res) => {
   const { url, format, audio } = req.query;
   if (!url) return res.status(400).json({ error: "URL is required" });
@@ -64,4 +98,5 @@ app.get("/api/video/download", (req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Video service running on port ${PORT}`);
+  console.log(`Cookies file: ${COOKIES_FILE} (${videoDownloader.hasCookies() ? "found" : "not found"})`);
 });

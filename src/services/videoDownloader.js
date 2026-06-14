@@ -7,12 +7,11 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const SUPPORTED = [
-  { name: "YouTube", host: /(^|\.)(youtube\.com|youtu\.be)$/i },
-  { name: "TikTok", host: /(^|\.)tiktok\.com$/i },
-  { name: "Instagram", host: /(^|\.)instagram\.com$/i },
-  { name: "Facebook", host: /(^|\.)(facebook\.com|fb\.watch|fb\.com)$/i },
-  { name: "X (Twitter)", host: /(^|\.)(x\.com|twitter\.com)$/i },
-  { name: "Threads", host: /(^|\.)threads\.(net|com)$/i },
+  { name: "YouTube", host: /(^|\.)(youtube\.com|youtu\.be)$/i, needsAuth: false },
+  { name: "TikTok", host: /(^|\.)tiktok\.com$/i, needsAuth: false },
+  { name: "Instagram", host: /(^|\.)instagram\.com$/i, needsAuth: true },
+  { name: "Facebook", host: /(^|\.)(facebook\.com|fb\.watch|fb\.com)$/i, needsAuth: true },
+  { name: "X (Twitter)", host: /(^|\.)(x\.com|twitter\.com)$/i, needsAuth: true },
 ];
 
 function detectPlatform(rawUrl) {
@@ -23,7 +22,7 @@ function detectPlatform(rawUrl) {
     return null;
   }
   const match = SUPPORTED.find((p) => p.host.test(host));
-  return match ? match.name : null;
+  return match || null;
 }
 
 function isShorts(rawUrl) {
@@ -129,8 +128,12 @@ function buildQualities(info) {
 async function getInfo(rawUrl) {
   const platform = detectPlatform(rawUrl);
   if (!platform) {
+    throw new Error("Platform tidak didukung.");
+  }
+
+  if (platform.needsAuth) {
     throw new Error(
-      "Platform tidak didukung. Gunakan link YouTube, TikTok, Instagram, Facebook, X, atau Threads."
+      `${platform.name} memerlukan cookies. Upload cookies.txt ke server terlebih dahulu.`
     );
   }
 
@@ -169,10 +172,17 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
     return;
   }
 
+  if (platform.needsAuth) {
+    res.status(400).json({
+      error: `${platform.name} memerlukan cookies.`,
+    });
+    return;
+  }
+
   const tmpFile = path.join(os.tmpdir(), `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const fileExt = audioOnly ? "mp3" : "mp4";
   const mime = audioOnly ? "audio/mpeg" : "video/mp4";
-  const safeName = `${platform.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.${fileExt}`;
+  const safeName = `${platform.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.${fileExt}`;
 
   const args = [...baseArgs(), "-o", tmpFile];
 

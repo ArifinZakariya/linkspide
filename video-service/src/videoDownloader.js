@@ -1,19 +1,29 @@
 const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 // Resolve yt-dlp binary. Allow override via env for portability.
 const YTDLP = process.env.YTDLP_PATH || "yt-dlp";
+
+// Cookies file path for platforms that require authentication.
+// Set via env COOKIES_FILE or default to /app/cookies.txt in container.
+const COOKIES_FILE = process.env.COOKIES_FILE || "/app/cookies.txt";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const SUPPORTED = [
-  { name: "YouTube", host: /(^|\.)(youtube\.com|youtu\.be)$/i },
-  { name: "TikTok", host: /(^|\.)tiktok\.com$/i },
-  { name: "Instagram", host: /(^|\.)instagram\.com$/i },
-  { name: "Facebook", host: /(^|\.)(facebook\.com|fb\.watch|fb\.com)$/i },
-  { name: "X (Twitter)", host: /(^|\.)(x\.com|twitter\.com)$/i },
-  { name: "Threads", host: /(^|\.)threads\.(net|com)$/i },
+  { name: "YouTube", host: /(^|\.)(youtube\.com|youtu\.be)$/i, needsAuth: false },
+  { name: "TikTok", host: /(^|\.)tiktok\.com$/i, needsAuth: false },
+  { name: "Instagram", host: /(^|\.)instagram\.com$/i, needsAuth: true },
+  { name: "Facebook", host: /(^|\.)(facebook\.com|fb\.watch|fb\.com)$/i, needsAuth: true },
+  { name: "X (Twitter)", host: /(^|\.)(x\.com|twitter\.com)$/i, needsAuth: true },
 ];
+
+function hasCookies() {
+  try { return fs.existsSync(COOKIES_FILE); } catch { return false; }
+}
 
 function detectPlatform(rawUrl) {
   let host;
@@ -23,14 +33,13 @@ function detectPlatform(rawUrl) {
     return null;
   }
   const match = SUPPORTED.find((p) => p.host.test(host));
-  return match ? match.name : null;
+  return match || null;
 }
 
 function isShorts(rawUrl) {
   return /youtube\.com\/shorts\//i.test(rawUrl) || /\/shorts\//i.test(rawUrl);
 }
 
-// Run yt-dlp and collect stdout. Rejects on non-zero exit.
 function runYtDlp(args, { timeout = 60000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(YTDLP, args, { windowsHide: true });
@@ -49,9 +58,7 @@ function runYtDlp(args, { timeout = 60000 } = {}) {
     child.on("error", (err) => {
       clearTimeout(timer);
       if (err.code === "ENOENT") {
-        return reject(
-          new Error("yt-dlp tidak ditemukan di server. Pastikan yt-dlp terpasang.")
-        );
+        return reject(new Error("yt-dlp tidak ditemukan di server."));
       }
       reject(err);
     });
@@ -69,17 +76,20 @@ function runYtDlp(args, { timeout = 60000 } = {}) {
 }
 
 function baseArgs() {
-  return ["--no-playlist", "--no-warnings", "--user-agent", UA];
+  const args = ["--no-playlist", "--no-warnings", "--user-agent", UA];
+  if (hasCookies()) {
+    args.push("--cookies", COOKIES_FILE);
+  }
+  return args;
 }
 
-// Build a list of friendly quality options from yt-dlp formats.
 function buildQualities(info) {
   const formats = Array.isArray(info.formats) ? info.formats : [];
   const seen = new Map();
 
   for (const f of formats) {
     if (!f.height) continue;
-    if (f.vcodec === "none") continue; // audio only
+    if (f.vcodec === "none") continue;
     const h = f.height;
     if (!seen.has(h)) {
       seen.set(h, {
@@ -117,8 +127,12 @@ function buildQualities(info) {
 async function getInfo(rawUrl) {
   const platform = detectPlatform(rawUrl);
   if (!platform) {
+    throw new Error("Platform tidak didukung.");
+  }
+
+  if (platform.needsAuth && !hasCookies()) {
     throw new Error(
-      "Platform tidak didukung. Gunakan link YouTube, TikTok, Instagram, Facebook, X, atau Threads."
+      `${platform.name} memerlukan cookies. Upload cookies.txt ke server terlebih dahulu.`
     );
   }
 
@@ -133,7 +147,7 @@ async function getInfo(rawUrl) {
   }
 
   return {
-    platform,
+    platform: platform.name,
     shorts: isShorts(rawUrl),
     id: info.id,
     title: info.title || info.id || "video",
@@ -144,12 +158,6 @@ async function getInfo(rawUrl) {
   };
 }
 
-// Stream a download directly to the HTTP response.
-// yt-dlp can't merge to stdout, so we download to a temp file first.
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
-
 function streamDownload(rawUrl, { format, audioOnly }, res) {
   const platform = detectPlatform(rawUrl);
   if (!platform) {
@@ -157,10 +165,17 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
     return;
   }
 
+  if (platform.needsAuth && !hasCookies()) {
+    res.status(400).json({
+      error: `${platform.name} memerlukan cookies. Upload cookies.txt ke server.`,
+    });
+    return;
+  }
+
   const tmpFile = path.join(os.tmpdir(), `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const fileExt = audioOnly ? "mp3" : "mp4";
   const mime = audioOnly ? "audio/mpeg" : "video/mp4";
-  const safeName = `${platform.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.${fileExt}`;
+  const safeName = `${platform.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}.${fileExt}`;
 
   const args = [...baseArgs(), "-o", tmpFile];
 
@@ -200,7 +215,6 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
       return;
     }
 
-    // File ready, stream it
     const stat = fs.statSync(tmpFile);
     res.setHeader("Content-Type", mime);
     res.setHeader("Content-Length", stat.size);
@@ -222,4 +236,4 @@ function streamDownload(rawUrl, { format, audioOnly }, res) {
   });
 }
 
-module.exports = { detectPlatform, isShorts, getInfo, streamDownload, SUPPORTED };
+module.exports = { detectPlatform, isShorts, getInfo, streamDownload, SUPPORTED, hasCookies };
