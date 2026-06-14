@@ -1,0 +1,16 @@
+{
+  "name": "shortlink-video-service",
+  "version": "1.0.0",
+  "description": "Video download microservice (yt-dlp + ffmpeg) for YouTube, TikTok, Instagram, Facebook, X, Threads",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2"
+  }
+}

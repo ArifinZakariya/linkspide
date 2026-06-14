@@ -82,6 +82,9 @@ router.post("/check", (req, res) => {
 });
 
 // ---- Video Download ----
+// In production (e.g. Vercel) yt-dlp can't run, so proxy to a dedicated
+// service (Fly.io) via VIDEO_SERVICE_URL. Locally it falls back to yt-dlp.
+const VIDEO_SERVICE_URL = (process.env.VIDEO_SERVICE_URL || "").replace(/\/$/, "");
 
 router.post("/video/info", async (req, res) => {
   try {
@@ -90,6 +93,19 @@ router.post("/video/info", async (req, res) => {
 
     let parsed;
     try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
+
+    if (VIDEO_SERVICE_URL) {
+      const r = await withTimeout(
+        fetch(`${VIDEO_SERVICE_URL}/api/video/info`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: parsed.href }),
+        }),
+        API_TIMEOUT
+      );
+      const data = await r.json();
+      return res.status(r.status).json(data);
+    }
 
     const info = await withTimeout(videoDownloader.getInfo(parsed.href), API_TIMEOUT);
     res.json({ success: true, ...info });
@@ -105,6 +121,17 @@ router.get("/video/download", (req, res) => {
 
   let parsed;
   try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
+
+  if (VIDEO_SERVICE_URL) {
+    // Redirect the browser to download straight from the video service,
+    // avoiding payload/time limits on the main (serverless) host.
+    const qs = new URLSearchParams({
+      url: parsed.href,
+      format: format || "",
+      audio: audio || "0",
+    });
+    return res.redirect(302, `${VIDEO_SERVICE_URL}/api/video/download?${qs.toString()}`);
+  }
 
   videoDownloader.streamDownload(
     parsed.href,
