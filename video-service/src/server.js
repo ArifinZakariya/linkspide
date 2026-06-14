@@ -97,7 +97,7 @@ app.post("/api/video/info", async (req, res) => {
         const fbInfo = await withTimeout(facebookApi.getVideoInfo(parsed.href), API_TIMEOUT);
         return res.json({ success: true, ...fbInfo });
       } catch (fbErr) {
-        console.log(`Facebook API error: ${fbErr.message}`);
+        console.log(`Facebook API failed, trying yt-dlp: ${fbErr.message}`);
       }
     }
 
