@@ -164,6 +164,8 @@ function setVideoStatus(msg, type = "") {
   s.classList.remove("hidden");
 }
 
+let videoDownloadBase = "";
+
 async function fetchVideo() {
   let url = normalizeUrl(el("videoInput").value);
   if (!url) { el("videoInput").focus(); return; }
@@ -175,6 +177,7 @@ async function fetchVideo() {
   hide("videoResult");
   hide("videoPlatformBadge");
   setVideoStatus("Mengambil info video...", "loading");
+  videoDownloadBase = "";
 
   try {
     const r = await fetch("/api/video/info", {
@@ -199,6 +202,7 @@ async function fetchVideo() {
       (d.shorts ? '<span class="tag tag-speed">Shorts</span>' : '') +
       '<span class="tag tag-steps">' + d.qualities.length + ' format</span>';
 
+    videoDownloadBase = d.downloadBase || "";
     renderQualities(url, d.qualities);
     show("videoResult");
     setVideoStatus("", "");
@@ -213,6 +217,7 @@ async function fetchVideo() {
 function renderQualities(url, qualities) {
   const list = el("qualityList");
   list.innerHTML = "";
+  const base = videoDownloadBase || "/api/video/download";
   qualities.forEach((q) => {
     const params = new URLSearchParams({
       url,
@@ -222,7 +227,7 @@ function renderQualities(url, qualities) {
     });
     const a = document.createElement("a");
     a.className = "quality-item" + (q.audioOnly ? " audio" : "");
-    a.href = "/api/video/download?" + params.toString();
+    a.href = base + "?" + params.toString();
     a.setAttribute("download", "");
     a.innerHTML =
       '<span class="q-name">' + q.quality +

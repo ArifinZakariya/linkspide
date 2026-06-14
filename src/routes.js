@@ -104,11 +104,12 @@ router.post("/video/info", async (req, res) => {
         API_TIMEOUT
       );
       const data = await r.json();
+      data.downloadBase = VIDEO_SERVICE_URL + "/api/video/download";
       return res.status(r.status).json(data);
     }
 
     const info = await withTimeout(videoDownloader.getInfo(parsed.href), API_TIMEOUT);
-    res.json({ success: true, ...info });
+    res.json({ success: true, ...info, downloadBase: "" });
   } catch (err) {
     const msg = err.message?.includes("timeout") ? "Request timed out" : err.message;
     res.status(500).json({ success: false, error: msg });
