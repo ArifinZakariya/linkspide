@@ -95,7 +95,7 @@ function buildQualities(info) {
         quality: label,
         height: h,
         // Prefer best video up to this height merged with best audio.
-        format: `bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`,
+        format: `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`,
         ext: "mp4",
         fps: f.fps || null,
       });
@@ -118,7 +118,7 @@ function buildQualities(info) {
     qualities.unshift({
       quality: "Best",
       height: 9999,
-      format: "best",
+      format: "best[ext=mp4]/best",
       ext: "mp4",
     });
   }

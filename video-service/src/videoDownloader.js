@@ -85,7 +85,7 @@ function buildQualities(info) {
       seen.set(h, {
         quality: `${h}p`,
         height: h,
-        format: `bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`,
+        format: `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[height<=${h}]`,
         ext: "mp4",
         fps: f.fps || null,
       });
@@ -106,7 +106,7 @@ function buildQualities(info) {
     qualities.unshift({
       quality: "Best",
       height: 9999,
-      format: "best",
+      format: "best[ext=mp4]/best",
       ext: "mp4",
     });
   }
