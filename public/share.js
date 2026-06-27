@@ -13,8 +13,17 @@ function checkConnection() {
   if (savedDevice) {
     const device = JSON.parse(savedDevice);
     connectedDeviceId = device.id;
+    currentShareRoom = device.roomId;
     isConnected = true;
-    showDeviceStatus(device.name, device.id);
+    
+    const peerName = device.peerName || 'Connected Device';
+    const peerId = device.peerId || device.id;
+    showDeviceStatus(peerName, peerId);
+    
+    socket.emit('reconnect-device', {
+      roomId: device.roomId,
+      deviceId: device.id
+    });
   }
 }
 
@@ -23,13 +32,14 @@ function showDeviceStatus(name, id) {
   document.getElementById('connectedDeviceId').textContent = 'ID: ' + id.substring(0, 8);
   document.getElementById('deviceStatus').classList.remove('hidden');
   
+  document.getElementById('sendDescription').textContent = 'Device connected. Pilih file untuk kirim.';
+  document.getElementById('receiveDescription').textContent = 'Device connected. Siap menerima file.';
+  
+  document.getElementById('btnGenerateQR').classList.add('hidden');
+  document.getElementById('btnStartScan').classList.add('hidden');
+  
   if (shareMode === 'send') {
-    document.getElementById('sendDescription').textContent = 'Device connected. Pilih file untuk kirim.';
-    document.getElementById('btnGenerateQR').classList.add('hidden');
     document.getElementById('fileSelectSection').classList.remove('hidden');
-  } else {
-    document.getElementById('receiveDescription').textContent = 'Device connected. Siap menerima file.';
-    document.getElementById('btnStartScan').classList.add('hidden');
   }
 }
 
@@ -53,8 +63,17 @@ function setShareMode(mode) {
   document.getElementById('shareSend').classList.toggle('hidden', mode !== 'send');
   document.getElementById('shareReceive').classList.toggle('hidden', mode !== 'receive');
   
-  checkConnection();
-  resetShareState();
+  if (isConnected) {
+    if (mode === 'send') {
+      document.getElementById('fileSelectSection').classList.remove('hidden');
+      setShareStatus('Ready to send files.', 'organic');
+    } else {
+      document.getElementById('fileSelectSection').classList.add('hidden');
+      setReceiveStatus('Ready to receive files.', 'organic');
+    }
+  } else {
+    resetShareState();
+  }
 }
 
 function resetShareState() {
@@ -206,10 +225,12 @@ function handleQRScanned(data) {
     localStorage.setItem('connectedDevice', JSON.stringify({
       id: deviceId,
       name: deviceName,
-      roomId: data.roomId
+      roomId: data.roomId,
+      peerId: data.senderId,
+      peerName: 'Sender Device'
     }));
     
-    showDeviceStatus(deviceName, deviceId);
+    showDeviceStatus('Sender Device', data.senderId);
     setReceiveStatus('Connected! Waiting for files...', 'organic');
   });
 }
@@ -223,8 +244,8 @@ function handleFileSelect(event) {
   document.getElementById('fileSize').textContent = formatFileSize(file.size);
   document.getElementById('fileInfo').classList.remove('hidden');
   
-  if (isConnected) {
-    setShareStatus('Ready to send. Waiting for receiver...', 'organic');
+  if (isConnected && currentShareRoom) {
+    setShareStatus('Ready to send. Notifying receiver...', 'organic');
     socket.emit('file-ready', {
       roomId: currentShareRoom,
       fileName: file.name,
@@ -236,18 +257,28 @@ function handleFileSelect(event) {
 
 socket.on('receiver-connected', (receiverId) => {
   console.log('Receiver connected:', receiverId);
-  const deviceName = 'Receiver Device';
+  const savedDevice = localStorage.getItem('connectedDevice');
+  let deviceData;
+  
+  if (savedDevice) {
+    deviceData = JSON.parse(savedDevice);
+    deviceData.peerId = receiverId;
+    deviceData.peerName = 'Connected Device';
+  } else {
+    deviceData = {
+      id: connectedDeviceId,
+      name: 'Sender Device',
+      roomId: currentShareRoom,
+      peerId: receiverId,
+      peerName: 'Connected Device'
+    };
+  }
   
   isConnected = true;
-  connectedDeviceId = receiverId;
   
-  localStorage.setItem('connectedDevice', JSON.stringify({
-    id: receiverId,
-    name: deviceName,
-    roomId: currentShareRoom
-  }));
+  localStorage.setItem('connectedDevice', JSON.stringify(deviceData));
   
-  showDeviceStatus(deviceName, receiverId);
+  showDeviceStatus(deviceData.peerName, receiverId);
   setShareStatus('Receiver connected! Select file to send.', 'organic');
   
   document.getElementById('qrCodeDisplay').classList.add('hidden');

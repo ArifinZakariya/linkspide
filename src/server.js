@@ -139,6 +139,25 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("reconnect-device", (data) => {
+    const room = shareRooms.get(data.roomId);
+    if (room) {
+      if (room.senderId === data.deviceId) {
+        room.sender = socket.id;
+        socket.shareRoomId = data.roomId;
+        socket.isSender = true;
+        socket.join(data.roomId);
+        console.log(`Sender ${socket.id} reconnected to room ${data.roomId}`);
+      } else if (room.receiverId === data.deviceId) {
+        room.receiver = socket.id;
+        socket.shareRoomId = data.roomId;
+        socket.isSender = false;
+        socket.join(data.roomId);
+        console.log(`Receiver ${socket.id} reconnected to room ${data.roomId}`);
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
     if (socket.roomId) {
