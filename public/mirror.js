@@ -41,15 +41,28 @@ function setViewerStatus(msg, type = "") {
 
 async function startSharing() {
   try {
-    setMirrorStatus('Meminta akses layar...', 'loading');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    localStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { 
-        cursor: 'always',
-        displaySurface: 'monitor'
-      },
-      audio: true
-    });
+    if (isMobile) {
+      setMirrorStatus('Meminta akses kamera...', 'loading');
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: true
+      });
+    } else {
+      setMirrorStatus('Meminta akses layar...', 'loading');
+      localStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { 
+          cursor: 'always',
+          displaySurface: 'monitor'
+        },
+        audio: true
+      });
+    }
 
     document.getElementById('localVideo').srcObject = localStream;
     document.getElementById('localPreview').classList.remove('hidden');
@@ -65,11 +78,12 @@ async function startSharing() {
       document.getElementById('viewerCount').classList.remove('hidden');
       document.getElementById('btnStartShare').disabled = true;
       document.getElementById('btnStartShare').innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/></svg>Sedang Share...';
-      setMirrorStatus('Share layar aktif! Bagikan kode room ke viewer.', 'organic');
+      const shareType = isMobile ? 'kamera' : 'layar';
+      setMirrorStatus('Share ' + shareType + ' aktif! Bagikan kode room ke viewer.', 'organic');
     });
   } catch (err) {
-    setMirrorStatus('Gagal mengakses layar: ' + err.message, 'error');
-    console.error('Error accessing display media:', err);
+    setMirrorStatus('Gagal mengakses: ' + err.message, 'error');
+    console.error('Error accessing media:', err);
   }
 }
 
