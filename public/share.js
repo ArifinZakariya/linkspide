@@ -185,6 +185,11 @@ function generateQRCode() {
 function startQRScan() {
   setReceiveStatus('Starting camera...', 'loading');
   
+  if (typeof ZXing === 'undefined') {
+    setReceiveStatus('QR Scanner library not loaded. Please refresh page.', 'error');
+    return;
+  }
+  
   navigator.mediaDevices.getUserMedia({ 
     video: { facingMode: 'environment' } 
   }).then(stream => {
@@ -194,24 +199,35 @@ function startQRScan() {
     document.getElementById('videoContainer').classList.remove('hidden');
     document.getElementById('btnStartScan').classList.add('hidden');
     
-    qrCodeReader = new ZXing.BrowserQRCodeReader();
-    
-    qrCodeReader.decodeFromVideoDevice(null, video, (result, err) => {
-      if (result) {
-        try {
-          const data = JSON.parse(result.text);
-          if (data.type === 'linksniper-share') {
-            handleQRScanned(data);
+    video.onloadedmetadata = () => {
+      video.play();
+      qrCodeReader = new ZXing.BrowserQRCodeReader();
+      
+      qrCodeReader.decodeFromVideoDevice(null, video, (result, err) => {
+        if (result) {
+          console.log('QR Code detected:', result.text);
+          try {
+            const data = JSON.parse(result.text);
+            if (data.type === 'linksniper-share') {
+              handleQRScanned(data);
+            } else {
+              console.log('Wrong QR type:', data.type);
+            }
+          } catch (e) {
+            console.log('Invalid QR code format:', e);
           }
-        } catch (e) {
-          console.log('Invalid QR code');
         }
-      }
-    });
-    
-    setReceiveStatus('Scan QR code from sender...', 'loading');
+        if (err && !(err instanceof ZXing.NotFoundException)) {
+          console.error('QR Scan error:', err);
+        }
+      });
+      
+      setReceiveStatus('Scan QR code from sender...', 'loading');
+    };
   }).catch(err => {
+    console.error('Camera error:', err);
     setReceiveStatus('Camera access denied: ' + err.message, 'error');
+    document.getElementById('btnStartScan').classList.remove('hidden');
   });
 }
 

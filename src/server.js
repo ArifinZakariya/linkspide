@@ -180,20 +180,24 @@ io.on("connection", (socket) => {
     const room = shareRooms.get(data.roomId);
     if (room) {
       const oldSenderId = room.senderId;
+      const oldSenderSocketId = room.sender;
       const oldReceiverId = room.receiverId;
+      const oldReceiverSocketId = room.receiver;
       
       if (data.newRole === 'send') {
         room.senderId = data.deviceId;
         room.sender = socket.id;
         room.receiverId = oldSenderId;
+        room.receiver = oldSenderSocketId;
         socket.isSender = true;
-        console.log(`Device ${data.deviceId} switched to sender, peer ${oldSenderId} is now receiver in room ${data.roomId}`);
+        console.log(`Device ${data.deviceId} (${socket.id}) switched to sender, peer ${oldSenderId} (${oldSenderSocketId}) is now receiver in room ${data.roomId}`);
       } else if (data.newRole === 'receive') {
         room.receiverId = data.deviceId;
         room.receiver = socket.id;
         room.senderId = oldReceiverId;
+        room.sender = oldReceiverSocketId;
         socket.isSender = false;
-        console.log(`Device ${data.deviceId} switched to receiver, peer ${oldReceiverId} is now sender in room ${data.roomId}`);
+        console.log(`Device ${data.deviceId} (${socket.id}) switched to receiver, peer ${oldReceiverId} (${oldReceiverSocketId}) is now sender in room ${data.roomId}`);
       }
       
       io.to(data.roomId).emit("role-switched", {
