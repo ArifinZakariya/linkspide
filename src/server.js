@@ -20,6 +20,7 @@ app.get("/", (req, res) => {
 });
 
 const rooms = new Map();
+const shareRooms = new Map();
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
@@ -63,6 +64,51 @@ io.on("connection", (socket) => {
     io.to(data.to).emit("ice-candidate", { candidate: data.candidate, from: socket.id });
   });
 
+  socket.on("create-share-room", (fileInfo, callback) => {
+    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    shareRooms.set(roomId, { 
+      sender: socket.id, 
+      receiver: null,
+      fileInfo: fileInfo
+    });
+    socket.join(roomId);
+    socket.shareRoomId = roomId;
+    socket.isSender = true;
+    console.log(`Share room created: ${roomId} by ${socket.id}`);
+    callback({ roomId });
+  });
+
+  socket.on("join-share-room", (roomId, callback) => {
+    const room = shareRooms.get(roomId);
+    if (!room) {
+      callback({ error: "Room tidak ditemukan" });
+      return;
+    }
+    if (room.receiver) {
+      callback({ error: "Room sudah penuh" });
+      return;
+    }
+    room.receiver = socket.id;
+    socket.join(roomId);
+    socket.shareRoomId = roomId;
+    socket.isSender = false;
+    console.log(`${socket.id} joined share room ${roomId}`);
+    io.to(room.sender).emit("receiver-joined", socket.id);
+    callback({ 
+      success: true,
+      fileName: room.fileInfo.fileName,
+      fileSize: room.fileInfo.fileSize
+    });
+  });
+
+  socket.on("file-chunk", (data) => {
+    io.to(data.to).emit("file-chunk", {
+      chunk: data.chunk,
+      chunkIndex: data.chunkIndex,
+      totalChunks: data.totalChunks
+    });
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
     if (socket.roomId) {
@@ -75,6 +121,18 @@ io.on("connection", (socket) => {
         } else {
           room.viewers = room.viewers.filter(id => id !== socket.id);
           io.to(room.host).emit("viewer-left", socket.id);
+        }
+      }
+    }
+    if (socket.shareRoomId) {
+      const room = shareRooms.get(socket.shareRoomId);
+      if (room) {
+        if (socket.isSender) {
+          io.to(socket.shareRoomId).emit("sender-disconnected");
+          shareRooms.delete(socket.shareRoomId);
+          console.log(`Share room ${socket.shareRoomId} deleted`);
+        } else {
+          io.to(room.sender).emit("receiver-disconnected");
         }
       }
     }

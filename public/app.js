@@ -132,11 +132,11 @@ async function resolve() {
 
 // ===== Tabs =====
 function switchTab(name) {
-  const tabs = ["bypass", "video", "mirror"];
+  const tabs = ["bypass", "video", "share"];
   const map = {
     bypass: { tab: "tabBypass", panel: "panelBypass" },
     video: { tab: "tabVideo", panel: "panelVideo" },
-    mirror: { tab: "tabMirror", panel: "panelMirror" },
+    share: { tab: "tabShare", panel: "panelShare" },
   };
   tabs.forEach((t) => {
     const active = t === name;

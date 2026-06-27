@@ -49,9 +49,9 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9"/><path d="m10 8 5 3-5 3z"/><path d="M12 17v4"/><path d="M8 21h8"/></svg>
         Video Downloader
       </button>
-      <button class="tab" id="tabMirror" onclick="switchTab('mirror')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-        Mirroring
+      <button class="tab" id="tabShare" onclick="switchTab('share')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        Share File
       </button>
     </div>
 
@@ -169,65 +169,70 @@
         </div>
       </section>
 
-      <!-- ===== MIRRORING PANEL ===== -->
-      <section id="panelMirror" class="hidden">
+      <!-- ===== SHARE FILE PANEL ===== -->
+      <section id="panelShare" class="hidden">
         <div class="input-card">
           <div class="mirror-mode">
-            <button class="mirror-mode-btn active" id="btnModeHost" onclick="setMirrorMode('host')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-              <span>Share Layar Saya</span>
+            <button class="mirror-mode-btn active" id="btnModeSend" onclick="setShareMode('send')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              <span>Kirim File</span>
             </button>
-            <button class="mirror-mode-btn" id="btnModeView" onclick="setMirrorMode('view')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              <span>Lihat Layar Orang Lain</span>
+            <button class="mirror-mode-btn" id="btnModeReceive" onclick="setShareMode('receive')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="8 18 12 22 16 18"/><line x1="12" y1="22" x2="12" y2="9"/></svg>
+              <span>Terima File</span>
             </button>
           </div>
         </div>
 
-        <div id="mirrorHost" class="mirror-panel">
+        <div id="shareSend" class="mirror-panel">
           <div class="mirror-card">
             <div class="mirror-info">
               <div class="mirror-icon">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
               </div>
-              <h3>Share Layar/Kamera Anda</h3>
-              <p>Klik tombol untuk mulai sharing. Desktop akan share layar, mobile akan share kamera. Kode room akan muncul untuk dibagikan ke viewer.</p>
+              <h3>Kirim File</h3>
+              <p>Pilih file untuk dibagikan. Kode room akan muncul untuk dibagikan ke penerima.</p>
             </div>
-            <button class="mirror-btn" id="btnStartShare" onclick="startSharing()">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m8 12 4 4 4-4"/></svg>
-              Mulai Share
+            <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelect(event)">
+            <button class="mirror-btn" id="btnSelectFile" onclick="document.getElementById('fileInput').click()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Pilih File
             </button>
-            <div id="roomCodeDisplay" class="room-code-box hidden">
+            <div id="fileInfo" class="room-code-box hidden">
+              <div class="room-code-label">File Dipilih:</div>
+              <div class="video-title" id="fileName"></div>
+              <div class="video-sub" id="fileSize"></div>
+            </div>
+            <div id="shareRoomDisplay" class="room-code-box hidden">
               <div class="room-code-label">Kode Room:</div>
-              <div class="room-code" id="roomCodeText"></div>
-              <button class="copy-btn" onclick="copyRoomCode()">
+              <div class="room-code" id="shareRoomCode"></div>
+              <button class="copy-btn" onclick="copyShareCode()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 Copy
               </button>
             </div>
-            <div id="viewerCount" class="viewer-count hidden">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              <span id="viewerCountText">0 viewers</span>
+            <div id="transferProgress" class="hidden">
+              <div class="progress-bar">
+                <div class="progress-fill" id="transferFill"></div>
+              </div>
+              <div class="video-sub" id="transferText">0%</div>
             </div>
           </div>
-          <div id="mirrorStatus" class="status hidden"></div>
-          <div id="localPreview" class="mirror-preview hidden">
-            <video id="localVideo" autoplay muted playsinline></video>
-          </div>
+          <div id="shareStatus" class="status hidden"></div>
         </div>
 
-        <div id="mirrorView" class="mirror-panel hidden">
+        <div id="shareReceive" class="mirror-panel hidden">
           <div class="mirror-card">
             <div class="mirror-info">
               <div class="mirror-icon">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </div>
-              <h3>Lihat Layar</h3>
-              <p>Masukkan kode room yang dibagikan host untuk melihat layar mereka.</p>
+              <h3>Terima File</h3>
+              <p>Masukkan kode room untuk menerima file dari pengirim.</p>
             </div>
             <div class="input-wrapper">
-              <input type="text" id="roomCodeInput" placeholder="Masukkan kode room..." maxlength="6" style="text-transform: uppercase;">
-              <button id="btnJoinRoom" onclick="joinRoom()">
+              <input type="text" id="receiveCodeInput" placeholder="Masukkan kode room..." maxlength="6" style="text-transform: uppercase;">
+              <button id="btnJoinShare" onclick="joinShareRoom()">
                 <span class="btn-text">Join</span>
                 <span class="btn-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
@@ -235,9 +240,46 @@
               </button>
             </div>
           </div>
-          <div id="viewerStatus" class="status hidden"></div>
-          <div id="remotePreview" class="mirror-preview hidden">
-            <video id="remoteVideo" autoplay playsinline></video>
+          <div id="receiveStatus" class="status hidden"></div>
+          
+          <div id="receiveFileInfo" class="file-receive-card hidden">
+            <div class="file-receive-header">
+              <div class="file-icon-large">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                  <polyline points="13 2 13 9 20 9"/>
+                </svg>
+              </div>
+              <div class="file-receive-info">
+                <div class="file-receive-name" id="receiveFileName"></div>
+                <div class="file-receive-size" id="receiveFileSize"></div>
+                <div class="file-receive-status">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Siap diterima
+                </div>
+              </div>
+            </div>
+            
+            <div id="receiveProgress" class="file-progress hidden">
+              <div class="file-progress-header">
+                <span class="file-progress-label">Menerima file...</span>
+                <span class="file-progress-percent" id="receiveText">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="receiveFill"></div>
+              </div>
+            </div>
+            
+            <button class="download-btn" id="btnDownloadFile" onclick="downloadFile()" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download File
+            </button>
           </div>
         </div>
       </section>
@@ -260,6 +302,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
-  <script src="/mirror.js"></script>
+  <script src="/share.js"></script>
 </body>
 </html>
