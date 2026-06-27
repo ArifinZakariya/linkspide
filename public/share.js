@@ -57,13 +57,23 @@ function disconnectDevice() {
 }
 
 function setShareMode(mode) {
+  const previousMode = shareMode;
   shareMode = mode;
   document.getElementById('btnModeSend').classList.toggle('active', mode === 'send');
   document.getElementById('btnModeReceive').classList.toggle('active', mode === 'receive');
   document.getElementById('shareSend').classList.toggle('hidden', mode !== 'send');
   document.getElementById('shareReceive').classList.toggle('hidden', mode !== 'receive');
   
-  if (isConnected && currentShareRoom) {
+  if (isConnected && currentShareRoom && previousMode !== mode) {
+    receivedFileData = null;
+    selectedFile = null;
+    document.getElementById('fileInfo').classList.add('hidden');
+    document.getElementById('transferProgress').classList.add('hidden');
+    document.getElementById('receiveFileInfo').classList.add('hidden');
+    document.getElementById('receiveProgress').classList.add('hidden');
+    document.getElementById('transferFill').style.width = '0%';
+    document.getElementById('receiveFill').style.width = '0%';
+    
     socket.emit('switch-role', {
       roomId: currentShareRoom,
       deviceId: connectedDeviceId,
@@ -72,12 +82,12 @@ function setShareMode(mode) {
     
     if (mode === 'send') {
       document.getElementById('fileSelectSection').classList.remove('hidden');
-      setShareStatus('Ready to send files.', 'organic');
+      setShareStatus('Switched to sender mode. Ready to send files.', 'organic');
     } else {
       document.getElementById('fileSelectSection').classList.add('hidden');
-      setReceiveStatus('Ready to receive files.', 'organic');
+      setReceiveStatus('Switched to receiver mode. Ready to receive files.', 'organic');
     }
-  } else {
+  } else if (!isConnected) {
     resetShareState();
   }
 }
@@ -311,7 +321,7 @@ socket.on('start-transfer', () => {
 });
 
 function sendFile() {
-  const chunkSize = 16384;
+  const chunkSize = 65536;
   const totalChunks = Math.ceil(selectedFile.size / chunkSize);
   let currentChunk = 0;
   
@@ -331,7 +341,7 @@ function sendFile() {
     document.getElementById('transferText').textContent = progress + '%';
     
     if (currentChunk < totalChunks) {
-      readNextChunk();
+      setTimeout(() => readNextChunk(), 10);
     } else {
       setShareStatus('File sent successfully!', 'organic');
       setTimeout(() => {
@@ -419,10 +429,25 @@ socket.on('role-switched', (data) => {
   if (savedDevice) {
     const device = JSON.parse(savedDevice);
     if (device.peerId === data.deviceId) {
+      receivedFileData = null;
+      selectedFile = null;
+      document.getElementById('fileInfo').classList.add('hidden');
+      document.getElementById('transferProgress').classList.add('hidden');
+      document.getElementById('receiveFileInfo').classList.add('hidden');
+      document.getElementById('receiveProgress').classList.add('hidden');
+      document.getElementById('transferFill').style.width = '0%';
+      document.getElementById('receiveFill').style.width = '0%';
+      
       if (data.newRole === 'send') {
-        console.log('Peer is now sender, I should be receiver');
+        console.log('Peer is now sender');
+        if (shareMode === 'send') {
+          setShareMode('receive');
+        }
       } else {
-        console.log('Peer is now receiver, I should be sender');
+        console.log('Peer is now receiver');
+        if (shareMode === 'receive') {
+          setShareMode('send');
+        }
       }
     }
   }
