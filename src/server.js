@@ -103,30 +103,39 @@ io.on("connection", (socket) => {
 
   socket.on("file-ready", (data) => {
     const room = shareRooms.get(data.roomId);
-    if (room && room.receiver) {
-      io.to(room.receiver).emit("file-ready", {
-        fileName: data.fileName,
-        fileSize: data.fileSize,
-        fileType: data.fileType
-      });
+    if (room) {
+      const targetId = room.receiver || room.receiverId;
+      if (targetId) {
+        io.to(room.receiver).emit("file-ready", {
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          fileType: data.fileType
+        });
+      }
     }
   });
 
   socket.on("start-transfer", (roomId) => {
     const room = shareRooms.get(roomId);
-    if (room && room.sender) {
-      io.to(room.sender).emit("start-transfer");
+    if (room) {
+      const targetId = room.sender || room.senderId;
+      if (targetId) {
+        io.to(room.sender).emit("start-transfer");
+      }
     }
   });
 
   socket.on("file-chunk", (data) => {
     const room = shareRooms.get(data.roomId);
-    if (room && room.receiver) {
-      io.to(room.receiver).emit("file-chunk", {
-        chunk: data.chunk,
-        chunkIndex: data.chunkIndex,
-        totalChunks: data.totalChunks
-      });
+    if (room) {
+      const targetId = room.receiver || room.receiverId;
+      if (targetId) {
+        io.to(room.receiver).emit("file-chunk", {
+          chunk: data.chunk,
+          chunkIndex: data.chunkIndex,
+          totalChunks: data.totalChunks
+        });
+      }
     }
   });
 
@@ -155,6 +164,34 @@ io.on("connection", (socket) => {
         socket.join(data.roomId);
         console.log(`Receiver ${socket.id} reconnected to room ${data.roomId}`);
       }
+    }
+  });
+
+  socket.on("switch-role", (data) => {
+    const room = shareRooms.get(data.roomId);
+    if (room) {
+      if (data.newRole === 'send') {
+        if (room.receiverId === data.deviceId) {
+          room.receiver = null;
+          room.sender = socket.id;
+          room.senderId = data.deviceId;
+          socket.isSender = true;
+          console.log(`Device ${data.deviceId} switched to sender in room ${data.roomId}`);
+        }
+      } else if (data.newRole === 'receive') {
+        if (room.senderId === data.deviceId) {
+          room.sender = null;
+          room.receiver = socket.id;
+          room.receiverId = data.deviceId;
+          socket.isSender = false;
+          console.log(`Device ${data.deviceId} switched to receiver in room ${data.roomId}`);
+        }
+      }
+      
+      io.to(data.roomId).emit("role-switched", {
+        deviceId: data.deviceId,
+        newRole: data.newRole
+      });
     }
   });
 

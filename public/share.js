@@ -63,7 +63,13 @@ function setShareMode(mode) {
   document.getElementById('shareSend').classList.toggle('hidden', mode !== 'send');
   document.getElementById('shareReceive').classList.toggle('hidden', mode !== 'receive');
   
-  if (isConnected) {
+  if (isConnected && currentShareRoom) {
+    socket.emit('switch-role', {
+      roomId: currentShareRoom,
+      deviceId: connectedDeviceId,
+      newRole: mode
+    });
+    
     if (mode === 'send') {
       document.getElementById('fileSelectSection').classList.remove('hidden');
       setShareStatus('Ready to send files.', 'organic');
@@ -404,5 +410,20 @@ socket.on('sender-disconnected', () => {
 socket.on('receiver-disconnected', () => {
   if (!isConnected) {
     setShareStatus('Receiver disconnected', 'error');
+  }
+});
+
+socket.on('role-switched', (data) => {
+  console.log('Role switched:', data);
+  const savedDevice = localStorage.getItem('connectedDevice');
+  if (savedDevice) {
+    const device = JSON.parse(savedDevice);
+    if (device.peerId === data.deviceId) {
+      if (data.newRole === 'send') {
+        console.log('Peer is now sender, I should be receiver');
+      } else {
+        console.log('Peer is now receiver, I should be sender');
+      }
+    }
   }
 });
