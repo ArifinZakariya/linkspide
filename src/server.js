@@ -104,32 +104,41 @@ io.on("connection", (socket) => {
   socket.on("file-ready", (data) => {
     const room = shareRooms.get(data.roomId);
     if (room) {
-      const targetId = room.receiver || room.receiverId;
-      if (targetId) {
+      console.log(`File ready in room ${data.roomId}, sender: ${room.sender}, receiver: ${room.receiver}`);
+      if (room.receiver) {
         io.to(room.receiver).emit("file-ready", {
           fileName: data.fileName,
           fileSize: data.fileSize,
           fileType: data.fileType
         });
+        console.log(`File-ready sent to receiver ${room.receiver}`);
+      } else {
+        console.log('No receiver found in room');
       }
+    } else {
+      console.log(`Room ${data.roomId} not found`);
     }
   });
 
   socket.on("start-transfer", (roomId) => {
     const room = shareRooms.get(roomId);
     if (room) {
-      const targetId = room.sender || room.senderId;
-      if (targetId) {
+      console.log(`Start transfer in room ${roomId}, sender: ${room.sender}`);
+      if (room.sender) {
         io.to(room.sender).emit("start-transfer");
+        console.log(`Start-transfer sent to sender ${room.sender}`);
+      } else {
+        console.log('No sender found in room');
       }
+    } else {
+      console.log(`Room ${roomId} not found`);
     }
   });
 
   socket.on("file-chunk", (data) => {
     const room = shareRooms.get(data.roomId);
     if (room) {
-      const targetId = room.receiver || room.receiverId;
-      if (targetId) {
+      if (room.receiver) {
         io.to(room.receiver).emit("file-chunk", {
           chunk: data.chunk,
           chunkIndex: data.chunkIndex,
@@ -170,22 +179,21 @@ io.on("connection", (socket) => {
   socket.on("switch-role", (data) => {
     const room = shareRooms.get(data.roomId);
     if (room) {
+      const oldSenderId = room.senderId;
+      const oldReceiverId = room.receiverId;
+      
       if (data.newRole === 'send') {
-        if (room.receiverId === data.deviceId) {
-          room.receiver = null;
-          room.sender = socket.id;
-          room.senderId = data.deviceId;
-          socket.isSender = true;
-          console.log(`Device ${data.deviceId} switched to sender in room ${data.roomId}`);
-        }
+        room.senderId = data.deviceId;
+        room.sender = socket.id;
+        room.receiverId = oldSenderId;
+        socket.isSender = true;
+        console.log(`Device ${data.deviceId} switched to sender, peer ${oldSenderId} is now receiver in room ${data.roomId}`);
       } else if (data.newRole === 'receive') {
-        if (room.senderId === data.deviceId) {
-          room.sender = null;
-          room.receiver = socket.id;
-          room.receiverId = data.deviceId;
-          socket.isSender = false;
-          console.log(`Device ${data.deviceId} switched to receiver in room ${data.roomId}`);
-        }
+        room.receiverId = data.deviceId;
+        room.receiver = socket.id;
+        room.senderId = oldReceiverId;
+        socket.isSender = false;
+        console.log(`Device ${data.deviceId} switched to receiver, peer ${oldReceiverId} is now sender in room ${data.roomId}`);
       }
       
       io.to(data.roomId).emit("role-switched", {
