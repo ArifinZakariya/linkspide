@@ -132,11 +132,11 @@ async function resolve() {
 
 // ===== Tabs =====
 function switchTab(name) {
-  const tabs = ["bypass", "video", "barcode"];
+  const tabs = ["bypass", "video", "mirror"];
   const map = {
     bypass: { tab: "tabBypass", panel: "panelBypass" },
     video: { tab: "tabVideo", panel: "panelVideo" },
-    barcode: { tab: "tabBarcode", panel: "panelBarcode" },
+    mirror: { tab: "tabMirror", panel: "panelMirror" },
   };
   tabs.forEach((t) => {
     const active = t === name;
@@ -268,127 +268,3 @@ el("urlInput").addEventListener("input", async () => {
     hide("detectedBadge");
   }
 });
-
-// ===== Barcode Generator =====
-let bcType = "qrcode";
-
-const BC_HINTS = {
-  qrcode: "Teks/URL bebas, mendukung karakter apa saja.",
-  CODE128: "Mendukung huruf, angka, dan simbol.",
-  EAN13: "Wajib 12 atau 13 digit angka.",
-  UPC: "Wajib 11 atau 12 digit angka.",
-  CODE39: "Huruf kapital, angka, dan - . $ / + % spasi.",
-  ITF14: "Wajib 13 atau 14 digit angka.",
-};
-
-function setBarcodeStatus(msg, type = "") {
-  const s = el("barcodeStatus");
-  if (!msg) { s.classList.add("hidden"); return; }
-  s.textContent = msg;
-  s.className = "status " + type;
-  s.classList.remove("hidden");
-}
-
-function setBarcodeType(type) {
-  bcType = type;
-  document.querySelectorAll(".bc-type").forEach((b) => {
-    b.classList.toggle("active", b.dataset.type === type);
-  });
-  el("bcHint").textContent = BC_HINTS[type] || "";
-  const input = el("barcodeInput");
-  const numeric = ["EAN13", "UPC", "ITF14"].includes(type);
-  input.placeholder = numeric ? "Ketik angka..." : "Ketik teks atau angka...";
-  if (numeric && !/^\d+$/.test(input.value)) {
-    input.value = type === "EAN13" ? "590123412345" : type === "UPC" ? "12345678901" : "1234567890123";
-  }
-  generateBarcode();
-}
-
-function generateBarcode() {
-  const value = el("barcodeInput").value.trim();
-  const fg = el("bcFg").value;
-  const bg = el("bcBg").value;
-  const size = parseInt(el("bcSize").value, 10);
-  const preview = el("bcPreview");
-
-  if (!value) {
-    setBarcodeStatus("Masukkan teks atau angka dulu", "error");
-    hide("barcodeResult");
-    return;
-  }
-
-  try {
-    if (bcType === "qrcode") {
-      if (typeof QRCode === "undefined") throw new Error("Library QR belum termuat");
-      preview.innerHTML = "";
-      new QRCode(preview, {
-        text: value,
-        width: size,
-        height: size,
-        colorDark: fg,
-        colorLight: bg,
-        correctLevel: QRCode.CorrectLevel.M,
-      });
-      setBarcodeStatus("", "");
-      show("barcodeResult");
-    } else {
-      if (typeof JsBarcode === "undefined") throw new Error("Library barcode belum termuat");
-      const canvas = document.createElement("canvas");
-      JsBarcode(canvas, value, {
-        format: bcType,
-        lineColor: fg,
-        background: bg,
-        width: Math.max(1, Math.round(size / 128)),
-        height: Math.round(size * 0.5),
-        displayValue: true,
-        margin: 12,
-        fontSize: 16,
-      });
-      preview.innerHTML = "";
-      preview.appendChild(canvas);
-      setBarcodeStatus("", "");
-      show("barcodeResult");
-    }
-  } catch (e) {
-    setBarcodeStatus(e.message || "Format tidak valid untuk input ini", "error");
-    hide("barcodeResult");
-  }
-}
-
-function getBarcodeCanvas() {
-  return el("bcPreview").querySelector("canvas");
-}
-
-function downloadBarcode() {
-  const canvas = getBarcodeCanvas();
-  if (!canvas) { setBarcodeStatus("Belum ada barcode", "error"); return; }
-  try {
-    const link = document.createElement("a");
-    link.download = "barcode-" + bcType.toLowerCase() + "-" + Date.now() + ".png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  } catch {
-    setBarcodeStatus("Gagal mengunduh", "error");
-  }
-}
-
-function copyBarcode() {
-  const canvas = getBarcodeCanvas();
-  if (!canvas) { setBarcodeStatus("Belum ada barcode", "error"); return; }
-  canvas.toBlob(async (blob) => {
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      setBarcodeStatus("Tersalin ke clipboard!", "organic");
-      setTimeout(() => setBarcodeStatus("", ""), 2000);
-    } catch {
-      setBarcodeStatus("Browser tidak mendukung copy gambar", "error");
-    }
-  });
-}
-
-el("barcodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") generateBarcode(); });
-el("barcodeInput").addEventListener("input", generateBarcode);
-["bcFg", "bcBg", "bcSize"].forEach((id) => el(id).addEventListener("input", generateBarcode));
-
-// Initial render
-el("bcHint").textContent = BC_HINTS.qrcode;
