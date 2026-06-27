@@ -159,18 +159,26 @@ function generateQRCode() {
     const qrContainer = document.getElementById('qrCodeCanvas');
     qrContainer.innerHTML = '';
     
-    new QRCode(qrContainer, {
-      text: qrData,
-      width: 256,
-      height: 256,
-      colorDark: '#6d5dfc',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.H
-    });
-    
-    document.getElementById('qrCodeDisplay').classList.remove('hidden');
-    document.getElementById('btnGenerateQR').classList.add('hidden');
-    setShareStatus('QR Code generated. Waiting for receiver to scan...', 'organic');
+    setTimeout(() => {
+      try {
+        new QRCode(qrContainer, {
+          text: qrData,
+          width: 256,
+          height: 256,
+          colorDark: '#6d5dfc',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.H
+        });
+        
+        document.getElementById('qrCodeDisplay').classList.remove('hidden');
+        document.getElementById('btnGenerateQR').classList.add('hidden');
+        setShareStatus('QR Code generated. Waiting for receiver to scan...', 'organic');
+      } catch (err) {
+        console.error('QR Code generation error:', err);
+        setShareStatus('Failed to generate QR Code. Try again.', 'error');
+        document.getElementById('btnGenerateQR').classList.remove('hidden');
+      }
+    }, 100);
   });
 }
 
@@ -437,17 +445,26 @@ socket.on('role-switched', (data) => {
       document.getElementById('receiveProgress').classList.add('hidden');
       document.getElementById('transferFill').style.width = '0%';
       document.getElementById('receiveFill').style.width = '0%';
+      document.getElementById('btnDownloadFile').disabled = true;
       
       if (data.newRole === 'send') {
-        console.log('Peer is now sender');
-        if (shareMode === 'send') {
-          setShareMode('receive');
-        }
+        console.log('Peer is now sender, switching to receiver');
+        shareMode = 'receive';
+        document.getElementById('btnModeSend').classList.remove('active');
+        document.getElementById('btnModeReceive').classList.add('active');
+        document.getElementById('shareSend').classList.add('hidden');
+        document.getElementById('shareReceive').classList.remove('hidden');
+        document.getElementById('fileSelectSection').classList.add('hidden');
+        setReceiveStatus('Peer switched to sender. Ready to receive files.', 'organic');
       } else {
-        console.log('Peer is now receiver');
-        if (shareMode === 'receive') {
-          setShareMode('send');
-        }
+        console.log('Peer is now receiver, switching to sender');
+        shareMode = 'send';
+        document.getElementById('btnModeSend').classList.add('active');
+        document.getElementById('btnModeReceive').classList.remove('active');
+        document.getElementById('shareSend').classList.remove('hidden');
+        document.getElementById('shareReceive').classList.add('hidden');
+        document.getElementById('fileSelectSection').classList.remove('hidden');
+        setShareStatus('Peer switched to receiver. Ready to send files.', 'organic');
       }
     }
   }
