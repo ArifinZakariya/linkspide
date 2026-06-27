@@ -64,12 +64,14 @@ io.on("connection", (socket) => {
     io.to(data.to).emit("ice-candidate", { candidate: data.candidate, from: socket.id });
   });
 
-  socket.on("create-share-room", (fileInfo, callback) => {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  socket.on("create-share-room", (data, callback) => {
+    const roomId = data.roomId;
     shareRooms.set(roomId, { 
-      sender: socket.id, 
+      sender: socket.id,
+      senderId: data.deviceId,
       receiver: null,
-      fileInfo: fileInfo
+      receiverId: null,
+      connected: false
     });
     socket.join(roomId);
     socket.shareRoomId = roomId;
@@ -78,7 +80,7 @@ io.on("connection", (socket) => {
     callback({ roomId });
   });
 
-  socket.on("join-share-room", (roomId, callback) => {
+  socket.on("join-share-room", (roomId, deviceId, callback) => {
     const room = shareRooms.get(roomId);
     if (!room) {
       callback({ error: "Room tidak ditemukan" });
@@ -89,24 +91,52 @@ io.on("connection", (socket) => {
       return;
     }
     room.receiver = socket.id;
+    room.receiverId = deviceId;
+    room.connected = true;
     socket.join(roomId);
     socket.shareRoomId = roomId;
     socket.isSender = false;
     console.log(`${socket.id} joined share room ${roomId}`);
-    io.to(room.sender).emit("receiver-joined", socket.id);
-    callback({ 
-      success: true,
-      fileName: room.fileInfo.fileName,
-      fileSize: room.fileInfo.fileSize
-    });
+    io.to(room.sender).emit("receiver-connected", deviceId);
+    callback({ success: true });
+  });
+
+  socket.on("file-ready", (data) => {
+    const room = shareRooms.get(data.roomId);
+    if (room && room.receiver) {
+      io.to(room.receiver).emit("file-ready", {
+        fileName: data.fileName,
+        fileSize: data.fileSize,
+        fileType: data.fileType
+      });
+    }
+  });
+
+  socket.on("start-transfer", (roomId) => {
+    const room = shareRooms.get(roomId);
+    if (room && room.sender) {
+      io.to(room.sender).emit("start-transfer");
+    }
   });
 
   socket.on("file-chunk", (data) => {
-    io.to(data.to).emit("file-chunk", {
-      chunk: data.chunk,
-      chunkIndex: data.chunkIndex,
-      totalChunks: data.totalChunks
-    });
+    const room = shareRooms.get(data.roomId);
+    if (room && room.receiver) {
+      io.to(room.receiver).emit("file-chunk", {
+        chunk: data.chunk,
+        chunkIndex: data.chunkIndex,
+        totalChunks: data.totalChunks
+      });
+    }
+  });
+
+  socket.on("disconnect-device", (roomId) => {
+    const room = shareRooms.get(roomId);
+    if (room) {
+      shareRooms.delete(roomId);
+      io.to(roomId).emit("device-disconnected");
+      console.log(`Share room ${roomId} manually disconnected`);
+    }
   });
 
   socket.on("disconnect", () => {
@@ -126,7 +156,7 @@ io.on("connection", (socket) => {
     }
     if (socket.shareRoomId) {
       const room = shareRooms.get(socket.shareRoomId);
-      if (room) {
+      if (room && !room.connected) {
         if (socket.isSender) {
           io.to(socket.shareRoomId).emit("sender-disconnected");
           shareRooms.delete(socket.shareRoomId);

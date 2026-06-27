@@ -171,6 +171,26 @@
 
       <!-- ===== SHARE FILE PANEL ===== -->
       <section id="panelShare" class="hidden">
+        <div id="deviceStatus" class="device-status-card hidden">
+          <div class="device-status-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </div>
+          <div class="device-status-info">
+            <div class="device-status-label">Connected Device:</div>
+            <div class="device-status-name" id="connectedDeviceName"></div>
+            <div class="device-status-id" id="connectedDeviceId"></div>
+          </div>
+          <button class="device-disconnect-btn" onclick="disconnectDevice()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+            Disconnect
+          </button>
+        </div>
+
         <div class="input-card">
           <div class="mirror-mode">
             <button class="mirror-mode-btn active" id="btnModeSend" onclick="setShareMode('send')">
@@ -191,31 +211,42 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
               </div>
               <h3>Kirim File</h3>
-              <p>Pilih file untuk dibagikan. Kode room akan muncul untuk dibagikan ke penerima.</p>
+              <p id="sendDescription">Generate QR Code untuk receiver scan dan connect.</p>
             </div>
-            <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelect(event)">
-            <button class="mirror-btn" id="btnSelectFile" onclick="document.getElementById('fileInput').click()">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Pilih File
+            <button class="mirror-btn" id="btnGenerateQR" onclick="generateQRCode()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+              </svg>
+              Generate QR Code
             </button>
-            <div id="fileInfo" class="room-code-box hidden">
-              <div class="room-code-label">File Dipilih:</div>
-              <div class="video-title" id="fileName"></div>
-              <div class="video-sub" id="fileSize"></div>
+            
+            <div id="qrCodeDisplay" class="qr-code-display hidden">
+              <div class="qr-code-label">Scan QR Code ini:</div>
+              <div class="qr-code-canvas" id="qrCodeCanvas"></div>
             </div>
-            <div id="shareRoomDisplay" class="room-code-box hidden">
-              <div class="room-code-label">Kode Room:</div>
-              <div class="room-code" id="shareRoomCode"></div>
-              <button class="copy-btn" onclick="copyShareCode()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copy
+
+            <div id="fileSelectSection" class="hidden">
+              <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelect(event)">
+              <button class="mirror-btn" id="btnSelectFile" onclick="document.getElementById('fileInput').click()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Pilih File untuk Kirim
               </button>
-            </div>
-            <div id="transferProgress" class="hidden">
-              <div class="progress-bar">
-                <div class="progress-fill" id="transferFill"></div>
+              
+              <div id="fileInfo" class="room-code-box hidden">
+                <div class="room-code-label">File Dipilih:</div>
+                <div class="video-title" id="fileName"></div>
+                <div class="video-sub" id="fileSize"></div>
               </div>
-              <div class="video-sub" id="transferText">0%</div>
+              
+              <div id="transferProgress" class="hidden">
+                <div class="progress-bar">
+                  <div class="progress-fill" id="transferFill"></div>
+                </div>
+                <div class="video-sub" id="transferText">0%</div>
+              </div>
             </div>
           </div>
           <div id="shareStatus" class="status hidden"></div>
@@ -228,20 +259,30 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </div>
               <h3>Terima File</h3>
-              <p>Masukkan kode room untuk menerima file dari pengirim.</p>
+              <p id="receiveDescription">Scan QR Code dari pengirim untuk connect.</p>
             </div>
-            <div class="input-wrapper">
-              <input type="text" id="receiveCodeInput" placeholder="Masukkan kode room..." maxlength="6" style="text-transform: uppercase;">
-              <button id="btnJoinShare" onclick="joinShareRoom()">
-                <span class="btn-text">Join</span>
-                <span class="btn-icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                </span>
-              </button>
-            </div>
+            <button class="mirror-btn" id="btnStartScan" onclick="startQRScan()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Scan QR Code
+            </button>
           </div>
           <div id="receiveStatus" class="status hidden"></div>
           
+          <div id="videoContainer" class="scanner-video-container hidden">
+            <video id="scannerVideo" autoplay playsinline></video>
+            <div class="scanner-overlay">
+              <div class="scanner-frame"></div>
+            </div>
+            <button class="scanner-close" onclick="stopQRScan()">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6 6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
           <div id="receiveFileInfo" class="file-receive-card hidden">
             <div class="file-receive-header">
               <div class="file-icon-large">
@@ -301,6 +342,8 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="/app.js"></script>
   <script src="/share.js"></script>
 </body>

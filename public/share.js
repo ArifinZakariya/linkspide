@@ -3,6 +3,48 @@ let currentShareRoom = null;
 let selectedFile = null;
 let shareMode = 'send';
 let receivedFileData = null;
+let isConnected = false;
+let connectedDeviceId = null;
+let qrCodeReader = null;
+let scannerStream = null;
+
+function checkConnection() {
+  const savedDevice = localStorage.getItem('connectedDevice');
+  if (savedDevice) {
+    const device = JSON.parse(savedDevice);
+    connectedDeviceId = device.id;
+    isConnected = true;
+    showDeviceStatus(device.name, device.id);
+  }
+}
+
+function showDeviceStatus(name, id) {
+  document.getElementById('connectedDeviceName').textContent = name;
+  document.getElementById('connectedDeviceId').textContent = 'ID: ' + id.substring(0, 8);
+  document.getElementById('deviceStatus').classList.remove('hidden');
+  
+  if (shareMode === 'send') {
+    document.getElementById('sendDescription').textContent = 'Device connected. Pilih file untuk kirim.';
+    document.getElementById('btnGenerateQR').classList.add('hidden');
+    document.getElementById('fileSelectSection').classList.remove('hidden');
+  } else {
+    document.getElementById('receiveDescription').textContent = 'Device connected. Siap menerima file.';
+    document.getElementById('btnStartScan').classList.add('hidden');
+  }
+}
+
+function disconnectDevice() {
+  localStorage.removeItem('connectedDevice');
+  isConnected = false;
+  connectedDeviceId = null;
+  document.getElementById('deviceStatus').classList.add('hidden');
+  
+  if (currentShareRoom) {
+    socket.emit('disconnect-device', currentShareRoom);
+  }
+  
+  location.reload();
+}
 
 function setShareMode(mode) {
   shareMode = mode;
@@ -11,22 +53,31 @@ function setShareMode(mode) {
   document.getElementById('shareSend').classList.toggle('hidden', mode !== 'send');
   document.getElementById('shareReceive').classList.toggle('hidden', mode !== 'receive');
   
+  checkConnection();
   resetShareState();
 }
 
 function resetShareState() {
   selectedFile = null;
-  currentShareRoom = null;
   receivedFileData = null;
   
   document.getElementById('fileInfo').classList.add('hidden');
-  document.getElementById('shareRoomDisplay').classList.add('hidden');
+  document.getElementById('qrCodeDisplay').classList.add('hidden');
   document.getElementById('transferProgress').classList.add('hidden');
   document.getElementById('receiveFileInfo').classList.add('hidden');
   document.getElementById('receiveProgress').classList.add('hidden');
+  document.getElementById('videoContainer').classList.add('hidden');
   setShareStatus('', '');
   setReceiveStatus('', '');
+  
+  if (!isConnected) {
+    document.getElementById('fileSelectSection').classList.add('hidden');
+    document.getElementById('btnGenerateQR').classList.remove('hidden');
+    document.getElementById('btnStartScan').classList.remove('hidden');
+  }
 }
+
+window.addEventListener('load', checkConnection);
 
 function setShareStatus(msg, type = "") {
   const s = document.getElementById('shareStatus');
@@ -51,6 +102,118 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
 }
 
+function generateQRCode() {
+  setShareStatus('Generating QR Code...', 'loading');
+  
+  const deviceId = 'sender_' + Math.random().toString(36).substring(2, 15);
+  const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  
+  socket.emit('create-share-room', {
+    deviceId: deviceId,
+    roomId: roomId
+  }, (response) => {
+    currentShareRoom = response.roomId;
+    connectedDeviceId = deviceId;
+    
+    const qrData = JSON.stringify({
+      type: 'linksniper-share',
+      roomId: currentShareRoom,
+      senderId: deviceId
+    });
+    
+    const qrContainer = document.getElementById('qrCodeCanvas');
+    qrContainer.innerHTML = '';
+    
+    new QRCode(qrContainer, {
+      text: qrData,
+      width: 256,
+      height: 256,
+      colorDark: '#6d5dfc',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    
+    document.getElementById('qrCodeDisplay').classList.remove('hidden');
+    document.getElementById('btnGenerateQR').classList.add('hidden');
+    setShareStatus('QR Code generated. Waiting for receiver to scan...', 'organic');
+  });
+}
+
+function startQRScan() {
+  setReceiveStatus('Starting camera...', 'loading');
+  
+  navigator.mediaDevices.getUserMedia({ 
+    video: { facingMode: 'environment' } 
+  }).then(stream => {
+    scannerStream = stream;
+    const video = document.getElementById('scannerVideo');
+    video.srcObject = stream;
+    document.getElementById('videoContainer').classList.remove('hidden');
+    document.getElementById('btnStartScan').classList.add('hidden');
+    
+    qrCodeReader = new ZXing.BrowserQRCodeReader();
+    
+    qrCodeReader.decodeFromVideoDevice(null, video, (result, err) => {
+      if (result) {
+        try {
+          const data = JSON.parse(result.text);
+          if (data.type === 'linksniper-share') {
+            handleQRScanned(data);
+          }
+        } catch (e) {
+          console.log('Invalid QR code');
+        }
+      }
+    });
+    
+    setReceiveStatus('Scan QR code from sender...', 'loading');
+  }).catch(err => {
+    setReceiveStatus('Camera access denied: ' + err.message, 'error');
+  });
+}
+
+function stopQRScan() {
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(track => track.stop());
+    scannerStream = null;
+  }
+  if (qrCodeReader) {
+    qrCodeReader.reset();
+    qrCodeReader = null;
+  }
+  document.getElementById('videoContainer').classList.add('hidden');
+  document.getElementById('btnStartScan').classList.remove('hidden');
+  setReceiveStatus('', '');
+}
+
+function handleQRScanned(data) {
+  stopQRScan();
+  setReceiveStatus('Connecting to sender...', 'loading');
+  
+  const deviceId = 'receiver_' + Math.random().toString(36).substring(2, 15);
+  const deviceName = 'Receiver Device';
+  
+  socket.emit('join-share-room', data.roomId, deviceId, (response) => {
+    if (response.error) {
+      setReceiveStatus(response.error, 'error');
+      return;
+    }
+    
+    currentShareRoom = data.roomId;
+    connectedDeviceId = deviceId;
+    isConnected = true;
+    
+    localStorage.setItem('connectedDevice', JSON.stringify({
+      id: deviceId,
+      name: deviceName,
+      roomId: data.roomId
+    }));
+    
+    showDeviceStatus(deviceName, deviceId);
+    setReceiveStatus('Connected! Waiting for files...', 'organic');
+  });
+}
+
 function handleFileSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -60,70 +223,57 @@ function handleFileSelect(event) {
   document.getElementById('fileSize').textContent = formatFileSize(file.size);
   document.getElementById('fileInfo').classList.remove('hidden');
   
-  createShareRoom();
-}
-
-function createShareRoom() {
-  setShareStatus('Membuat room...', 'loading');
-  
-  socket.emit('create-share-room', {
-    fileName: selectedFile.name,
-    fileSize: selectedFile.size,
-    fileType: selectedFile.type
-  }, (response) => {
-    currentShareRoom = response.roomId;
-    document.getElementById('shareRoomCode').textContent = currentShareRoom;
-    document.getElementById('shareRoomDisplay').classList.remove('hidden');
-    setShareStatus('Room dibuat! Bagikan kode ke penerima.', 'organic');
-  });
-}
-
-function copyShareCode() {
-  const code = document.getElementById('shareRoomCode').textContent;
-  navigator.clipboard.writeText(code).then(() => {
-    const btn = event.target.closest('.copy-btn');
-    btn.textContent = 'Copied!';
-    setTimeout(() => {
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy';
-    }, 2000);
-  });
-}
-
-function joinShareRoom() {
-  const roomId = document.getElementById('receiveCodeInput').value.trim().toUpperCase();
-  if (!roomId) {
-    setReceiveStatus('Masukkan kode room', 'error');
-    return;
+  if (isConnected) {
+    setShareStatus('Ready to send. Waiting for receiver...', 'organic');
+    socket.emit('file-ready', {
+      roomId: currentShareRoom,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
   }
-
-  setReceiveStatus('Bergabung ke room...', 'loading');
-  
-  socket.emit('join-share-room', roomId, (response) => {
-    if (response.error) {
-      setReceiveStatus(response.error, 'error');
-      return;
-    }
-    
-    currentShareRoom = roomId;
-    document.getElementById('btnJoinShare').disabled = true;
-    document.getElementById('receiveCodeInput').disabled = true;
-    
-    document.getElementById('receiveFileName').textContent = response.fileName;
-    document.getElementById('receiveFileSize').textContent = formatFileSize(response.fileSize);
-    document.getElementById('receiveFileInfo').classList.remove('hidden');
-    setReceiveStatus('Terhubung! Siap menerima file.', 'organic');
-  });
 }
 
-socket.on('receiver-joined', (receiverId) => {
-  console.log('Receiver joined:', receiverId);
-  setShareStatus('Penerima bergabung! Mengirim file...', 'loading');
-  document.getElementById('transferProgress').classList.remove('hidden');
+socket.on('receiver-connected', (receiverId) => {
+  console.log('Receiver connected:', receiverId);
+  const deviceName = 'Receiver Device';
   
-  sendFile(receiverId);
+  isConnected = true;
+  connectedDeviceId = receiverId;
+  
+  localStorage.setItem('connectedDevice', JSON.stringify({
+    id: receiverId,
+    name: deviceName,
+    roomId: currentShareRoom
+  }));
+  
+  showDeviceStatus(deviceName, receiverId);
+  setShareStatus('Receiver connected! Select file to send.', 'organic');
+  
+  document.getElementById('qrCodeDisplay').classList.add('hidden');
+  document.getElementById('fileSelectSection').classList.remove('hidden');
 });
 
-function sendFile(receiverId) {
+socket.on('file-ready', (data) => {
+  console.log('File ready:', data);
+  document.getElementById('receiveFileName').textContent = data.fileName;
+  document.getElementById('receiveFileSize').textContent = formatFileSize(data.fileSize);
+  document.getElementById('receiveFileInfo').classList.remove('hidden');
+  setReceiveStatus('File incoming. Ready to receive...', 'organic');
+  
+  socket.emit('start-transfer', currentShareRoom);
+});
+
+socket.on('start-transfer', () => {
+  if (!selectedFile) return;
+  
+  setShareStatus('Sending file...', 'loading');
+  document.getElementById('transferProgress').classList.remove('hidden');
+  
+  sendFile();
+});
+
+function sendFile() {
   const chunkSize = 16384;
   const totalChunks = Math.ceil(selectedFile.size / chunkSize);
   let currentChunk = 0;
@@ -132,7 +282,7 @@ function sendFile(receiverId) {
   
   reader.onload = function(e) {
     socket.emit('file-chunk', {
-      to: receiverId,
+      roomId: currentShareRoom,
       chunk: e.target.result,
       chunkIndex: currentChunk,
       totalChunks: totalChunks
@@ -146,7 +296,15 @@ function sendFile(receiverId) {
     if (currentChunk < totalChunks) {
       readNextChunk();
     } else {
-      setShareStatus('File terkirim!', 'organic');
+      setShareStatus('File sent successfully!', 'organic');
+      setTimeout(() => {
+        document.getElementById('fileInfo').classList.add('hidden');
+        document.getElementById('transferProgress').classList.add('hidden');
+        document.getElementById('transferFill').style.width = '0%';
+        setShareStatus('Ready to send another file.', 'organic');
+        selectedFile = null;
+        document.getElementById('fileInput').value = '';
+      }, 2000);
     }
   };
   
@@ -176,7 +334,7 @@ socket.on('file-chunk', (data) => {
   document.getElementById('receiveText').textContent = progress + '%';
   
   if (data.chunkIndex + 1 === data.totalChunks) {
-    setReceiveStatus('File diterima! Klik download untuk menyimpan.', 'organic');
+    setReceiveStatus('File received! Click download to save.', 'organic');
     document.getElementById('btnDownloadFile').disabled = false;
   }
 });
@@ -194,21 +352,26 @@ function downloadFile() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   
-  setReceiveStatus('File berhasil didownload!', 'organic');
+  setReceiveStatus('File downloaded successfully!', 'organic');
+  
+  setTimeout(() => {
+    receivedFileData = null;
+    document.getElementById('receiveFileInfo').classList.add('hidden');
+    document.getElementById('receiveProgress').classList.add('hidden');
+    document.getElementById('receiveFill').style.width = '0%';
+    document.getElementById('btnDownloadFile').disabled = true;
+    setReceiveStatus('Ready to receive next file.', 'organic');
+  }, 2000);
 }
 
 socket.on('sender-disconnected', () => {
-  setReceiveStatus('Pengirim disconnect', 'error');
-  document.getElementById('btnJoinShare').disabled = false;
-  document.getElementById('receiveCodeInput').disabled = false;
-  document.getElementById('receiveCodeInput').value = '';
-  currentShareRoom = null;
+  if (!isConnected) {
+    setReceiveStatus('Sender disconnected', 'error');
+  }
 });
 
-document.getElementById('receiveCodeInput').addEventListener('input', (e) => {
-  e.target.value = e.target.value.toUpperCase();
-});
-
-document.getElementById('receiveCodeInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') joinShareRoom();
+socket.on('receiver-disconnected', () => {
+  if (!isConnected) {
+    setShareStatus('Receiver disconnected', 'error');
+  }
 });
