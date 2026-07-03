@@ -3,6 +3,8 @@ const knownDomains = {
   "ouo.press": "OUO",
   "linkvertise.com": "Linkvertise",
   "shrinkme.io": "ShrinkMe",
+  "shrinkme.click": "ShrinkMe",
+  "shrinke.me": "ShrinkMe",
   "shorte.st": "Shorte.st",
   "sh.st": "Shorte.st",
   "adf.ly": "Adf.ly",
