@@ -190,44 +190,104 @@ function startQRScan() {
     return;
   }
   
-  navigator.mediaDevices.getUserMedia({ 
-    video: { facingMode: 'environment' } 
-  }).then(stream => {
+  // Request back camera with specific constraints for mobile
+  const constraints = {
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    }
+  };
+  
+  navigator.mediaDevices.getUserMedia(constraints).then(stream => {
     scannerStream = stream;
     const video = document.getElementById('scannerVideo');
     video.srcObject = stream;
+    video.setAttribute('playsinline', 'true');
     document.getElementById('videoContainer').classList.remove('hidden');
     document.getElementById('btnStartScan').classList.add('hidden');
     
     video.onloadedmetadata = () => {
       video.play();
-      qrCodeReader = new ZXing.BrowserQRCodeReader();
       
-      qrCodeReader.decodeFromVideoDevice(null, video, (result, err) => {
-        if (result) {
-          console.log('QR Code detected:', result.text);
-          try {
-            const data = JSON.parse(result.text);
-            if (data.type === 'linksniper-share') {
-              handleQRScanned(data);
-            } else {
-              console.log('Wrong QR type:', data.type);
-            }
-          } catch (e) {
-            console.log('Invalid QR code format:', e);
-          }
-        }
-        if (err && !(err instanceof ZXing.NotFoundException)) {
-          console.error('QR Scan error:', err);
-        }
-      });
+      // Use barcodeDetector API if available (faster & native)
+      if ('BarcodeDetector' in window) {
+        scanWithBarcodeDetector(video, stream);
+      } else {
+        scanWithZXing(video, stream);
+      }
       
       setReceiveStatus('Scan QR code from sender...', 'loading');
     };
   }).catch(err => {
     console.error('Camera error:', err);
-    setReceiveStatus('Camera access denied: ' + err.message, 'error');
-    document.getElementById('btnStartScan').classList.remove('hidden');
+    // Fallback: try without facingMode constraint
+    navigator.mediaDevices.getUserMedia({ video: true }).then(fallbackStream => {
+      scannerStream = fallbackStream;
+      const video = document.getElementById('scannerVideo');
+      video.srcObject = fallbackStream;
+      video.setAttribute('playsinline', 'true');
+      document.getElementById('videoContainer').classList.remove('hidden');
+      document.getElementById('btnStartScan').classList.add('hidden');
+      
+      video.onloadedmetadata = () => {
+        video.play();
+        if ('BarcodeDetector' in window) {
+          scanWithBarcodeDetector(video, fallbackStream);
+        } else {
+          scanWithZXing(video, fallbackStream);
+        }
+        setReceiveStatus('Scan QR code from sender...', 'loading');
+      };
+    }).catch(fallbackErr => {
+      setReceiveStatus('Camera access denied: ' + fallbackErr.message, 'error');
+      document.getElementById('btnStartScan').classList.remove('hidden');
+    });
+  });
+}
+
+function scanWithBarcodeDetector(video, stream) {
+  const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+  
+  async function scanFrame() {
+    if (!scannerStream) return;
+    try {
+      const barcodes = await barcodeDetector.detect(video);
+      if (barcodes.length > 0) {
+        const result = barcodes[0].rawValue;
+        console.log('BarcodeDetector detected:', result);
+        try {
+          const data = JSON.parse(result);
+          if (data.type === 'linksniper-share') {
+            handleQRScanned(data);
+            return;
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+    if (scannerStream) {
+      requestAnimationFrame(scanFrame);
+    }
+  }
+  scanFrame();
+}
+
+function scanWithZXing(video, stream) {
+  qrCodeReader = new ZXing.BrowserQRCodeReader();
+  
+  qrCodeReader.decodeFromVideoDevice(null, video, (result, err) => {
+    if (result) {
+      console.log('QR Code detected:', result.text);
+      try {
+        const data = JSON.parse(result.text);
+        if (data.type === 'linksniper-share') {
+          handleQRScanned(data);
+        }
+      } catch (e) {}
+    }
+    if (err && !(err instanceof ZXing.NotFoundException)) {
+      console.error('QR Scan error:', err);
+    }
   });
 }
 
@@ -237,7 +297,7 @@ function stopQRScan() {
     scannerStream = null;
   }
   if (qrCodeReader) {
-    qrCodeReader.reset();
+    try { qrCodeReader.reset(); } catch(e) {}
     qrCodeReader = null;
   }
   document.getElementById('videoContainer').classList.add('hidden');
@@ -345,7 +405,8 @@ socket.on('start-transfer', () => {
 });
 
 function sendFile() {
-  const chunkSize = 65536;
+  // Larger chunk size for faster transfer (1MB instead of 64KB)
+  const chunkSize = 1024 * 1024;
   const totalChunks = Math.ceil(selectedFile.size / chunkSize);
   let currentChunk = 0;
   
@@ -365,7 +426,8 @@ function sendFile() {
     document.getElementById('transferText').textContent = progress + '%';
     
     if (currentChunk < totalChunks) {
-      setTimeout(() => readNextChunk(), 10);
+      // No delay - send next chunk immediately
+      readNextChunk();
     } else {
       setShareStatus('File sent successfully!', 'organic');
       setTimeout(() => {
