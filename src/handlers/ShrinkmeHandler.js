@@ -1,6 +1,9 @@
 const BaseHandler = require("./BaseHandler");
 const { getClient } = require("../utils/httpClient");
 const cheerio = require("cheerio");
+const axios = require("axios");
+
+const PUPPETEER_SERVICE_URL = process.env.PUPPETEER_SERVICE_URL || "https://shortlink-puppeteer.fly.dev";
 
 class ShrinkmeHandler extends BaseHandler {
   get name() {
@@ -12,7 +15,6 @@ class ShrinkmeHandler extends BaseHandler {
   }
 
   async extract($, html, url) {
-    // shrinkme.click/shrinke.me - bypass Cloudflare by making direct requests
     if (/shrinkme\.click|shrinke\.me/.test(url)) {
       return await this.handleShrinkmeClick(url);
     }
@@ -60,21 +62,21 @@ class ShrinkmeHandler extends BaseHandler {
       }
     }
 
-    const scriptUrls = html.match(/(?:src|href)=["']([^"']*(?:config|dest|go|link|redirect)[^"']*)/gi);
-    if (scriptUrls) {
-      for (const s of scriptUrls) {
-        const m = s.match(/["']([^"']+)/);
-        if (m && m[1].startsWith("http")) return { redirect: m[1] };
-      }
-    }
-
     return null;
   }
 
   async handleShrinkmeClick(url) {
+    // Method 1: Try HTTP bypass first (faster)
+    const httpResult = await this.tryHttpBypass(url);
+    if (httpResult) return httpResult;
+
+    // Method 2: Fallback to Puppeteer service on Fly.io
+    return await this.tryPuppeteerBypass(url);
+  }
+
+  async tryHttpBypass(url) {
     const parsed = new URL(url);
     const code = parsed.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
-    
     if (!code) return null;
 
     const domains = [
@@ -87,36 +89,28 @@ class ShrinkmeHandler extends BaseHandler {
     for (const domain of domains) {
       try {
         const targetUrl = `${domain}/${code}`;
-        
-        // Create fresh client for each attempt
         const client = axios.create({
-          timeout: 20000,
-          maxRedirects: 5,
+          timeout: 15000,
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
             "Sec-Fetch-Dest": "document",
             "Sec-Fetch-Mode": "navigate",
             "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Cache-Control": "max-age=0",
+            "Upgrade-Insecure-Requests": "1",
           },
         });
 
-        // GET the page
         const getResp = await client.get(targetUrl, {
-          headers: {
-            referer: "https://mrproblogger.com/",
-          },
+          headers: { referer: "https://mrproblogger.com/" },
         });
 
         if (!getResp.data || typeof getResp.data !== "string") continue;
+        if (getResp.data.includes("challenge-platform") || getResp.data.includes("Just a moment")) {
+          continue;
+        }
 
-        // Parse HTML and extract form
         const $page = cheerio.load(getResp.data);
         const formData = {};
         $page("input[name]").each((_, el) => {
@@ -127,14 +121,12 @@ class ShrinkmeHandler extends BaseHandler {
 
         if (Object.keys(formData).length === 0) continue;
 
-        // Extract cookies
         const setCookies = getResp.headers?.["set-cookie"];
         let cookieStr = "";
         if (setCookies) {
           cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
         }
 
-        // POST to /links/go
         const goResp = await client.post(
           `${domain}/links/go`,
           new URLSearchParams(formData).toString(),
@@ -148,20 +140,33 @@ class ShrinkmeHandler extends BaseHandler {
           }
         );
 
-        const result = goResp.data;
-        if (result && result.url) {
-          return { redirect: result.url };
+        if (goResp.data?.url) {
+          return { redirect: goResp.data.url };
         }
       } catch (e) {
         continue;
       }
     }
-
     return null;
   }
-}
 
-// Import axios directly for independent requests
-const axios = require("axios");
+  async tryPuppeteerBypass(url) {
+    try {
+      const resp = await axios.post(
+        `${PUPPETEER_SERVICE_URL}/api/shrinkme`,
+        { url, timeout: 45000 },
+        { timeout: 60000 }
+      );
+
+      if (resp.data?.success && resp.data?.url) {
+        return { redirect: resp.data.url };
+      }
+      return null;
+    } catch (e) {
+      console.error("[ShrinkmeHandler] Puppeteer service error:", e.message);
+      return null;
+    }
+  }
+}
 
 module.exports = ShrinkmeHandler;

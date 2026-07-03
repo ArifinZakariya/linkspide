@@ -1,5 +1,6 @@
 const express = require("express");
 const { solveLivewire } = require("./handlers/livewireSolver");
+const { solveShrinkme } = require("./handlers/shrinkmeSolver");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -55,13 +56,36 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", browser: browser?.connected ? "connected" : "disconnected" });
 });
 
+// Generic bypass endpoint
 app.post("/api/bypass", async (req, res) => {
   const { url, strategy = "livewire", timeout = 30000 } = req.body;
   if (!url) return res.status(400).json({ error: "URL is required" });
 
   try {
     const b = await getBrowser();
-    const result = await solveLivewire(b, url, timeout);
+    let result;
+
+    if (/shrinkme\.click|shrinke\.me/.test(url)) {
+      result = await solveShrinkme(b, url, timeout || 45000);
+    } else {
+      result = await solveLivewire(b, url, timeout);
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error("[ERROR]", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Direct shrinkme endpoint
+app.post("/api/shrinkme", async (req, res) => {
+  const { url, timeout = 45000 } = req.body;
+  if (!url) return res.status(400).json({ error: "URL is required" });
+
+  try {
+    const b = await getBrowser();
+    const result = await solveShrinkme(b, url, timeout);
     res.json(result);
   } catch (err) {
     console.error("[ERROR]", err.message);
