@@ -137,14 +137,13 @@ io.on("connection", (socket) => {
 
   socket.on("file-chunk", (data) => {
     const room = shareRooms.get(data.roomId);
-    if (room) {
-      if (room.receiver) {
-        io.to(room.receiver).emit("file-chunk", {
-          chunk: data.chunk,
-          chunkIndex: data.chunkIndex,
-          totalChunks: data.totalChunks
-        });
-      }
+    if (room && room.receiver) {
+      io.to(room.receiver).emit("file-chunk", {
+        chunk: data.chunk,
+        chunkIndex: data.chunkIndex,
+        totalChunks: data.totalChunks,
+        fileName: data.fileName
+      });
     }
   });
 
@@ -178,33 +177,43 @@ io.on("connection", (socket) => {
 
   socket.on("switch-role", (data) => {
     const room = shareRooms.get(data.roomId);
-    if (room) {
-      const oldSenderId = room.senderId;
-      const oldSenderSocketId = room.sender;
-      const oldReceiverId = room.receiverId;
-      const oldReceiverSocketId = room.receiver;
-      
-      if (data.newRole === 'send') {
-        room.senderId = data.deviceId;
-        room.sender = socket.id;
-        room.receiverId = oldSenderId;
-        room.receiver = oldSenderSocketId;
-        socket.isSender = true;
-        console.log(`Device ${data.deviceId} (${socket.id}) switched to sender, peer ${oldSenderId} (${oldSenderSocketId}) is now receiver in room ${data.roomId}`);
-      } else if (data.newRole === 'receive') {
-        room.receiverId = data.deviceId;
-        room.receiver = socket.id;
-        room.senderId = oldReceiverId;
-        room.sender = oldReceiverSocketId;
-        socket.isSender = false;
-        console.log(`Device ${data.deviceId} (${socket.id}) switched to receiver, peer ${oldReceiverId} (${oldReceiverSocketId}) is now sender in room ${data.roomId}`);
+    if (!room) return;
+    
+    const isSender = (room.senderId === data.deviceId);
+    const peerId = isSender ? room.receiverId : room.senderId;
+    
+    // Find peer's current socket by iterating room members
+    let peerSocketId = null;
+    const roomSockets = io.sockets.adapter.rooms.get(data.roomId);
+    if (roomSockets) {
+      for (const sid of roomSockets) {
+        if (sid !== socket.id) {
+          peerSocketId = sid;
+          break;
+        }
       }
-      
-      io.to(data.roomId).emit("role-switched", {
-        deviceId: data.deviceId,
-        newRole: data.newRole
-      });
     }
+    
+    if (data.newRole === 'send') {
+      room.senderId = data.deviceId;
+      room.sender = socket.id;
+      room.receiverId = peerId;
+      room.receiver = peerSocketId;
+      socket.isSender = true;
+    } else {
+      room.receiverId = data.deviceId;
+      room.receiver = socket.id;
+      room.senderId = peerId;
+      room.sender = peerSocketId;
+      socket.isSender = false;
+    }
+    
+    console.log(`switch-role room=${data.roomId}: sender=${room.senderId}(${room.sender}) receiver=${room.receiverId}(${room.receiver})`);
+    
+    io.to(data.roomId).emit("role-switched", {
+      deviceId: data.deviceId,
+      newRole: data.newRole
+    });
   });
 
   socket.on("disconnect", () => {
@@ -224,13 +233,31 @@ io.on("connection", (socket) => {
     }
     if (socket.shareRoomId) {
       const room = shareRooms.get(socket.shareRoomId);
-      if (room && !room.connected) {
+      if (room) {
+        // Find peer's current socket ID before cleanup
+        const roomSockets = io.sockets.adapter.rooms.get(socket.shareRoomId);
+        let peerSocketId = null;
+        if (roomSockets) {
+          for (const sid of roomSockets) {
+            if (sid !== socket.id) peerSocketId = sid;
+          }
+        }
+        
         if (socket.isSender) {
-          io.to(socket.shareRoomId).emit("sender-disconnected");
+          if (peerSocketId) {
+            io.to(peerSocketId).emit("sender-disconnected");
+          }
           shareRooms.delete(socket.shareRoomId);
-          console.log(`Share room ${socket.shareRoomId} deleted`);
+          console.log(`Share room ${socket.shareRoomId} deleted (sender disconnected)`);
         } else {
-          io.to(room.sender).emit("receiver-disconnected");
+          if (peerSocketId) {
+            io.to(peerSocketId).emit("receiver-disconnected");
+          }
+          // Clear stale reference
+          room.receiver = null;
+          room.receiverId = null;
+          room.connected = false;
+          console.log(`Share room ${socket.shareRoomId} receiver disconnected, room kept`);
         }
       }
     }

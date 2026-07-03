@@ -65,14 +65,7 @@ function setShareMode(mode) {
   document.getElementById('shareReceive').classList.toggle('hidden', mode !== 'receive');
   
   if (isConnected && currentShareRoom && previousMode !== mode) {
-    receivedFileData = null;
-    selectedFile = null;
-    document.getElementById('fileInfo').classList.add('hidden');
-    document.getElementById('transferProgress').classList.add('hidden');
-    document.getElementById('receiveFileInfo').classList.add('hidden');
-    document.getElementById('receiveProgress').classList.add('hidden');
-    document.getElementById('transferFill').style.width = '0%';
-    document.getElementById('receiveFill').style.width = '0%';
+    resetTransferState();
     
     socket.emit('switch-role', {
       roomId: currentShareRoom,
@@ -92,15 +85,28 @@ function setShareMode(mode) {
   }
 }
 
-function resetShareState() {
+function resetTransferState() {
   selectedFile = null;
   receivedFileData = null;
   
   document.getElementById('fileInfo').classList.add('hidden');
-  document.getElementById('qrCodeDisplay').classList.add('hidden');
   document.getElementById('transferProgress').classList.add('hidden');
+  document.getElementById('transferFill').style.width = '0%';
+  document.getElementById('transferText').textContent = '0%';
+  
   document.getElementById('receiveFileInfo').classList.add('hidden');
   document.getElementById('receiveProgress').classList.add('hidden');
+  document.getElementById('receiveFill').style.width = '0%';
+  document.getElementById('receiveText').textContent = '0%';
+  document.getElementById('btnDownloadFile').disabled = true;
+  
+  document.getElementById('fileInput').value = '';
+}
+
+function resetShareState() {
+  resetTransferState();
+  
+  document.getElementById('qrCodeDisplay').classList.add('hidden');
   document.getElementById('videoContainer').classList.add('hidden');
   setShareStatus('', '');
   setReceiveStatus('', '');
@@ -190,7 +196,6 @@ function startQRScan() {
     return;
   }
   
-  // Request back camera with specific constraints for mobile
   const constraints = {
     video: {
       facingMode: { ideal: 'environment' },
@@ -210,18 +215,16 @@ function startQRScan() {
     video.onloadedmetadata = () => {
       video.play();
       
-      // Use barcodeDetector API if available (faster & native)
       if ('BarcodeDetector' in window) {
-        scanWithBarcodeDetector(video, stream);
+        scanWithBarcodeDetector(video);
       } else {
-        scanWithZXing(video, stream);
+        scanWithZXing(video);
       }
       
       setReceiveStatus('Scan QR code from sender...', 'loading');
     };
   }).catch(err => {
     console.error('Camera error:', err);
-    // Fallback: try without facingMode constraint
     navigator.mediaDevices.getUserMedia({ video: true }).then(fallbackStream => {
       scannerStream = fallbackStream;
       const video = document.getElementById('scannerVideo');
@@ -233,9 +236,9 @@ function startQRScan() {
       video.onloadedmetadata = () => {
         video.play();
         if ('BarcodeDetector' in window) {
-          scanWithBarcodeDetector(video, fallbackStream);
+          scanWithBarcodeDetector(video);
         } else {
-          scanWithZXing(video, fallbackStream);
+          scanWithZXing(video);
         }
         setReceiveStatus('Scan QR code from sender...', 'loading');
       };
@@ -246,7 +249,7 @@ function startQRScan() {
   });
 }
 
-function scanWithBarcodeDetector(video, stream) {
+function scanWithBarcodeDetector(video) {
   const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
   
   async function scanFrame() {
@@ -255,7 +258,6 @@ function scanWithBarcodeDetector(video, stream) {
       const barcodes = await barcodeDetector.detect(video);
       if (barcodes.length > 0) {
         const result = barcodes[0].rawValue;
-        console.log('BarcodeDetector detected:', result);
         try {
           const data = JSON.parse(result);
           if (data.type === 'linksniper-share') {
@@ -272,21 +274,17 @@ function scanWithBarcodeDetector(video, stream) {
   scanFrame();
 }
 
-function scanWithZXing(video, stream) {
+function scanWithZXing(video) {
   qrCodeReader = new ZXing.BrowserQRCodeReader();
   
   qrCodeReader.decodeFromVideoDevice(null, video, (result, err) => {
     if (result) {
-      console.log('QR Code detected:', result.text);
       try {
         const data = JSON.parse(result.text);
         if (data.type === 'linksniper-share') {
           handleQRScanned(data);
         }
       } catch (e) {}
-    }
-    if (err && !(err instanceof ZXing.NotFoundException)) {
-      console.error('QR Scan error:', err);
     }
   });
 }
@@ -310,7 +308,6 @@ function handleQRScanned(data) {
   setReceiveStatus('Connecting to sender...', 'loading');
   
   const deviceId = 'receiver_' + Math.random().toString(36).substring(2, 15);
-  const deviceName = 'Receiver Device';
   
   socket.emit('join-share-room', data.roomId, deviceId, (response) => {
     if (response.error) {
@@ -321,14 +318,20 @@ function handleQRScanned(data) {
     currentShareRoom = data.roomId;
     connectedDeviceId = deviceId;
     isConnected = true;
+    shareMode = 'receive';
     
     localStorage.setItem('connectedDevice', JSON.stringify({
       id: deviceId,
-      name: deviceName,
+      name: 'Receiver Device',
       roomId: data.roomId,
       peerId: data.senderId,
       peerName: 'Sender Device'
     }));
+    
+    document.getElementById('btnModeSend').classList.remove('active');
+    document.getElementById('btnModeReceive').classList.add('active');
+    document.getElementById('shareSend').classList.add('hidden');
+    document.getElementById('shareReceive').classList.remove('hidden');
     
     showDeviceStatus('Sender Device', data.senderId);
     setReceiveStatus('Connected! Waiting for files...', 'organic');
@@ -357,24 +360,16 @@ function handleFileSelect(event) {
 
 socket.on('receiver-connected', (receiverId) => {
   console.log('Receiver connected:', receiverId);
-  const savedDevice = localStorage.getItem('connectedDevice');
-  let deviceData;
-  
-  if (savedDevice) {
-    deviceData = JSON.parse(savedDevice);
-    deviceData.peerId = receiverId;
-    deviceData.peerName = 'Connected Device';
-  } else {
-    deviceData = {
-      id: connectedDeviceId,
-      name: 'Sender Device',
-      roomId: currentShareRoom,
-      peerId: receiverId,
-      peerName: 'Connected Device'
-    };
-  }
   
   isConnected = true;
+  
+  const deviceData = {
+    id: connectedDeviceId,
+    name: 'Sender Device',
+    roomId: currentShareRoom,
+    peerId: receiverId,
+    peerName: 'Connected Device'
+  };
   
   localStorage.setItem('connectedDevice', JSON.stringify(deviceData));
   
@@ -396,7 +391,10 @@ socket.on('file-ready', (data) => {
 });
 
 socket.on('start-transfer', () => {
-  if (!selectedFile) return;
+  if (!selectedFile) {
+    setShareStatus('No file selected. Please select a file first.', 'error');
+    return;
+  }
   
   setShareStatus('Sending file...', 'loading');
   document.getElementById('transferProgress').classList.remove('hidden');
@@ -405,19 +403,21 @@ socket.on('start-transfer', () => {
 });
 
 function sendFile() {
-  // Larger chunk size for faster transfer (1MB instead of 64KB)
-  const chunkSize = 1024 * 1024;
+  const chunkSize = 1024 * 1024; // 1MB chunks
   const totalChunks = Math.ceil(selectedFile.size / chunkSize);
   let currentChunk = 0;
   
   const reader = new FileReader();
   
   reader.onload = function(e) {
+    if (!currentShareRoom) return;
+    
     socket.emit('file-chunk', {
       roomId: currentShareRoom,
       chunk: e.target.result,
       chunkIndex: currentChunk,
-      totalChunks: totalChunks
+      totalChunks: totalChunks,
+      fileName: selectedFile.name
     });
     
     currentChunk++;
@@ -426,19 +426,18 @@ function sendFile() {
     document.getElementById('transferText').textContent = progress + '%';
     
     if (currentChunk < totalChunks) {
-      // No delay - send next chunk immediately
       readNextChunk();
     } else {
       setShareStatus('File sent successfully!', 'organic');
       setTimeout(() => {
-        document.getElementById('fileInfo').classList.add('hidden');
-        document.getElementById('transferProgress').classList.add('hidden');
-        document.getElementById('transferFill').style.width = '0%';
+        resetTransferState();
         setShareStatus('Ready to send another file.', 'organic');
-        selectedFile = null;
-        document.getElementById('fileInput').value = '';
       }, 2000);
     }
+  };
+  
+  reader.onerror = function() {
+    setShareStatus('Error reading file', 'error');
   };
   
   function readNextChunk() {
@@ -452,10 +451,13 @@ function sendFile() {
 }
 
 socket.on('file-chunk', (data) => {
+  if (shareMode !== 'receive') return;
+  
   if (!receivedFileData) {
     receivedFileData = {
       chunks: [],
-      totalChunks: data.totalChunks
+      totalChunks: data.totalChunks,
+      fileName: data.fileName || 'file'
     };
     document.getElementById('receiveProgress').classList.remove('hidden');
   }
@@ -469,6 +471,7 @@ socket.on('file-chunk', (data) => {
   if (data.chunkIndex + 1 === data.totalChunks) {
     setReceiveStatus('File received! Click download to save.', 'organic');
     document.getElementById('btnDownloadFile').disabled = false;
+    document.getElementById('receiveFileName').textContent = data.fileName || receivedFileData.fileName;
   }
 });
 
@@ -488,62 +491,68 @@ function downloadFile() {
   setReceiveStatus('File downloaded successfully!', 'organic');
   
   setTimeout(() => {
-    receivedFileData = null;
-    document.getElementById('receiveFileInfo').classList.add('hidden');
-    document.getElementById('receiveProgress').classList.add('hidden');
-    document.getElementById('receiveFill').style.width = '0%';
-    document.getElementById('btnDownloadFile').disabled = true;
+    resetTransferState();
     setReceiveStatus('Ready to receive next file.', 'organic');
   }, 2000);
 }
 
 socket.on('sender-disconnected', () => {
-  if (!isConnected) {
-    setReceiveStatus('Sender disconnected', 'error');
-  }
+  setReceiveStatus('Sender disconnected', 'error');
 });
 
 socket.on('receiver-disconnected', () => {
-  if (!isConnected) {
-    setShareStatus('Receiver disconnected', 'error');
-  }
+  setShareStatus('Receiver disconnected', 'error');
 });
 
 socket.on('role-switched', (data) => {
   console.log('Role switched:', data);
+  
+  // Reset transfer state
+  resetTransferState();
+  
+  // Determine if I am the new sender or receiver
+  const amSender = (data.newRole === 'send' && data.deviceId !== connectedDeviceId) ||
+                   (data.newRole === 'receive' && data.deviceId === connectedDeviceId);
+  
+  if (amSender) {
+    // I am now the sender
+    shareMode = 'send';
+    document.getElementById('btnModeSend').classList.add('active');
+    document.getElementById('btnModeReceive').classList.remove('active');
+    document.getElementById('shareSend').classList.remove('hidden');
+    document.getElementById('shareReceive').classList.add('hidden');
+    document.getElementById('fileSelectSection').classList.remove('hidden');
+    setShareStatus('Role switched. You are now the sender. Select a file.', 'organic');
+  } else {
+    // I am now the receiver
+    shareMode = 'receive';
+    document.getElementById('btnModeSend').classList.remove('active');
+    document.getElementById('btnModeReceive').classList.add('active');
+    document.getElementById('shareSend').classList.add('hidden');
+    document.getElementById('shareReceive').classList.remove('hidden');
+    document.getElementById('fileSelectSection').classList.add('hidden');
+    setReceiveStatus('Role switched. You are now the receiver. Ready to receive files.', 'organic');
+  }
+  
+  // Update localStorage
   const savedDevice = localStorage.getItem('connectedDevice');
   if (savedDevice) {
     const device = JSON.parse(savedDevice);
-    if (device.peerId === data.deviceId) {
-      receivedFileData = null;
-      selectedFile = null;
-      document.getElementById('fileInfo').classList.add('hidden');
-      document.getElementById('transferProgress').classList.add('hidden');
-      document.getElementById('receiveFileInfo').classList.add('hidden');
-      document.getElementById('receiveProgress').classList.add('hidden');
-      document.getElementById('transferFill').style.width = '0%';
-      document.getElementById('receiveFill').style.width = '0%';
-      document.getElementById('btnDownloadFile').disabled = true;
-      
-      if (data.newRole === 'send') {
-        console.log('Peer is now sender, switching to receiver');
-        shareMode = 'receive';
-        document.getElementById('btnModeSend').classList.remove('active');
-        document.getElementById('btnModeReceive').classList.add('active');
-        document.getElementById('shareSend').classList.add('hidden');
-        document.getElementById('shareReceive').classList.remove('hidden');
-        document.getElementById('fileSelectSection').classList.add('hidden');
-        setReceiveStatus('Peer switched to sender. Ready to receive files.', 'organic');
-      } else {
-        console.log('Peer is now receiver, switching to sender');
-        shareMode = 'send';
-        document.getElementById('btnModeSend').classList.add('active');
-        document.getElementById('btnModeReceive').classList.remove('active');
-        document.getElementById('shareSend').classList.remove('hidden');
-        document.getElementById('shareReceive').classList.add('hidden');
-        document.getElementById('fileSelectSection').classList.remove('hidden');
-        setShareStatus('Peer switched to receiver. Ready to send files.', 'organic');
-      }
-    }
+    device.role = amSender ? 'send' : 'receive';
+    localStorage.setItem('connectedDevice', JSON.stringify(device));
+  }
+});
+
+socket.on('disconnect', () => {
+  console.log('Socket disconnected');
+});
+
+socket.on('connect', () => {
+  console.log('Socket connected');
+  if (currentShareRoom && connectedDeviceId) {
+    socket.emit('reconnect-device', {
+      roomId: currentShareRoom,
+      deviceId: connectedDeviceId
+    });
   }
 });
