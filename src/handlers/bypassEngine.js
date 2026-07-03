@@ -119,10 +119,26 @@ async function resolveUrl(url, maxDepth = 15) {
       const isCf = html && (
         html.includes("Just a moment") ||
         html.includes("cf-browser-verification") ||
-        html.includes("cf_chl_opt")
+        html.includes("cf_chl_opt") ||
+        html.includes("challenge-platform")
       );
 
       if (isCf) cloudflareDetected = true;
+
+      // For shrinkme.click, try handler directly (bypass Cloudflare check)
+      if (cloudflareDetected && /shrinkme\.click|shrinke\.me/.test(current)) {
+        const shrinkmeHandler = handlers.find(h => h.name === "shrinkme");
+        if (shrinkmeHandler) {
+          try {
+            const found = await shrinkmeHandler.extract(null, "", current);
+            if (found && found.redirect) {
+              chain.push({ handler: "shrinkme", extracted: found, method: "direct-bypass" });
+              current = found.redirect;
+              continue;
+            }
+          } catch (e) {}
+        }
+      }
 
       if (finalUrl === current && html) {
         const $ = load(html);

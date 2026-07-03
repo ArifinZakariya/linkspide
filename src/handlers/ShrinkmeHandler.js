@@ -1,5 +1,6 @@
 const BaseHandler = require("./BaseHandler");
 const { getClient } = require("../utils/httpClient");
+const cheerio = require("cheerio");
 
 class ShrinkmeHandler extends BaseHandler {
   get name() {
@@ -11,9 +12,9 @@ class ShrinkmeHandler extends BaseHandler {
   }
 
   async extract($, html, url) {
-    // shrinkme.click uses /links/go POST endpoint
+    // shrinkme.click/shrinke.me - bypass Cloudflare by making direct requests
     if (/shrinkme\.click|shrinke\.me/.test(url)) {
-      return await this.handleShrinkmeClick($, html, url);
+      return await this.handleShrinkmeClick(url);
     }
 
     const form = $("form").first();
@@ -70,26 +71,15 @@ class ShrinkmeHandler extends BaseHandler {
     return null;
   }
 
-  async handleShrinkmeClick($, html, url) {
-    const client = getClient();
-    const code = url.replace(/\/$/, "").split("/").pop();
-
-    // Extract hidden form inputs from current page
-    const formData = {};
-    $("input[name]").each((_, el) => {
-      const name = $(el).attr("name");
-      const value = $(el).attr("value") || "";
-      if (name) formData[name] = value;
-    });
-
-    // Determine base domain from URL
+  async handleShrinkmeClick(url) {
     const parsed = new URL(url);
-    const baseDomain = `${parsed.protocol}//${parsed.hostname}`;
+    const code = parsed.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+    
+    if (!code) return null;
 
-    // Try multiple domain variants
     const domains = [
       "https://en.shrinke.me",
-      baseDomain,
+      "https://shrinkme.click",
       "https://shrinke.me",
       "https://shrinkme.io",
     ];
@@ -97,60 +87,64 @@ class ShrinkmeHandler extends BaseHandler {
     for (const domain of domains) {
       try {
         const targetUrl = `${domain}/${code}`;
-
-        // GET request with special headers to bypass Cloudflare
-        const getResp = await client.get(targetUrl, {
+        
+        // Create fresh client for each attempt
+        const client = axios.create({
+          timeout: 20000,
+          maxRedirects: 5,
           headers: {
-            referer: "https://mrproblogger.com/",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
             "Sec-Fetch-Dest": "document",
             "Sec-Fetch-Mode": "navigate",
             "Sec-Fetch-Site": "none",
             "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
             "Cache-Control": "max-age=0",
           },
-          timeout: 15000,
         });
 
-        // Extract form data from response if we got HTML
-        let sessionFormData = { ...formData };
-        if (getResp.data && typeof getResp.data === "string") {
-          const $resp = require("cheerio").load(getResp.data);
-          $resp("input[name]").each((_, el) => {
-            const name = $resp(el).attr("name");
-            const value = $resp(el).attr("value") || "";
-            if (name) sessionFormData[name] = value;
-          });
-        }
+        // GET the page
+        const getResp = await client.get(targetUrl, {
+          headers: {
+            referer: "https://mrproblogger.com/",
+          },
+        });
 
-        if (Object.keys(sessionFormData).length === 0) continue;
+        if (!getResp.data || typeof getResp.data !== "string") continue;
 
-        // Extract cookies from response
+        // Parse HTML and extract form
+        const $page = cheerio.load(getResp.data);
+        const formData = {};
+        $page("input[name]").each((_, el) => {
+          const name = $page(el).attr("name");
+          const value = $page(el).attr("value") || "";
+          if (name) formData[name] = value;
+        });
+
+        if (Object.keys(formData).length === 0) continue;
+
+        // Extract cookies
         const setCookies = getResp.headers?.["set-cookie"];
         let cookieStr = "";
         if (setCookies) {
           cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
         }
 
-        // POST to /links/go with XMLHttpRequest header
+        // POST to /links/go
         const goResp = await client.post(
           `${domain}/links/go`,
-          new URLSearchParams(sessionFormData).toString(),
+          new URLSearchParams(formData).toString(),
           {
             headers: {
               "x-requested-with": "XMLHttpRequest",
               referer: targetUrl,
               "content-type": "application/x-www-form-urlencoded",
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               ...(cookieStr ? { Cookie: cookieStr } : {}),
             },
-            timeout: 20000,
           }
         );
 
@@ -166,5 +160,8 @@ class ShrinkmeHandler extends BaseHandler {
     return null;
   }
 }
+
+// Import axios directly for independent requests
+const axios = require("axios");
 
 module.exports = ShrinkmeHandler;
