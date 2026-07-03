@@ -25,7 +25,7 @@ const SERVICE_MAP = [
   { name: "OUO", match: /ouo\.(io|press)/, strategy: "ouo", fast: true },
   { name: "TPI", match: /tpi\.(li|ac)|srtam\.com/, strategy: "token-decode", fast: true },
   { name: "Linkvertise", match: /linkvertise\.com/, strategy: "linkvertise", fast: false },
-  { name: "ShrinkMe", match: /shrinkme\.io/, strategy: "countdown-click", fast: false },
+  { name: "ShrinkMe", match: /shrinkme\.(io|click)|shrinke\.me/, strategy: "shrinkme", fast: false },
   { name: "Shorte.st", match: /shorte\.st|sh\.st/, strategy: "countdown-click", fast: false },
   { name: "Adf.ly", match: /adf\.ly/, strategy: "countdown-click", fast: false },
   { name: "GPLinks", match: /gplinks?\.(com|co|net)|mitly\.us|cutp\.in|fc\.lc|za\.gl|tnlink\.in/, strategy: "countdown-form", fast: false },
@@ -80,6 +80,14 @@ class GenericOrganic {
 
       if (this._isCloudflare(title)) {
         log("Cloudflare detected");
+        // For shrinkme.click/shrinke.me, try Python service
+        if (/shrinkme\.click|shrinke\.me/.test(url)) {
+          log("Trying Python bypass service for shrinkme...");
+          const pyResult = await this._shrinkmeHttp(url, log);
+          if (pyResult) {
+            return { success: true, url: pyResult, service: service.name, logs, time: Date.now() - t0 };
+          }
+        }
         return { success: false, error: "Cloudflare challenge detected", logs, time: Date.now() - t0 };
       }
 
@@ -184,7 +192,29 @@ class GenericOrganic {
       case "countdown-click": return this._countdownClickHttp(url, html, log);
       case "countdown-form": return this._countdownFormHttp(url, html, log);
       case "livewire": return this._livewireHttp(url, html, log);
+      case "shrinkme": return this._shrinkmeHttp(url, log);
       default: return this._autoHttp(url, html, log);
+    }
+  }
+
+  async _shrinkmeHttp(url, log) {
+    const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || "https://shortlink-python.fly.dev";
+    try {
+      log("Calling Python bypass service...");
+      const client = getClient({ timeout: 65000 });
+      const res = await client.post(`${PYTHON_SERVICE_URL}/api/shrinkme`, { url }, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 60000,
+      });
+      if (res.data?.success && res.data?.url) {
+        log("Python service OK -> " + res.data.url);
+        return res.data.url;
+      }
+      log("Python service failed: " + JSON.stringify(res.data));
+      return null;
+    } catch (err) {
+      log("Python service error: " + err.message);
+      return null;
     }
   }
 
