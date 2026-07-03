@@ -74,15 +74,13 @@ class ShrinkmeHandler extends BaseHandler {
     const client = getClient();
     const code = url.replace(/\/$/, "").split("/").pop();
 
-    // Extract hidden form inputs
+    // Extract hidden form inputs from current page
     const formData = {};
     $("input[name]").each((_, el) => {
       const name = $(el).attr("name");
       const value = $(el).attr("value") || "";
       if (name) formData[name] = value;
     });
-
-    if (Object.keys(formData).length === 0) return null;
 
     // Determine base domain from URL
     const parsed = new URL(url);
@@ -100,27 +98,57 @@ class ShrinkmeHandler extends BaseHandler {
       try {
         const targetUrl = `${domain}/${code}`;
 
-        // First GET to establish session
-        await client.get(targetUrl, {
+        // GET request with special headers to bypass Cloudflare
+        const getResp = await client.get(targetUrl, {
           headers: {
             referer: "https://mrproblogger.com/",
             "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "Cache-Control": "max-age=0",
           },
-          timeout: 10000,
+          timeout: 15000,
         });
+
+        // Extract form data from response if we got HTML
+        let sessionFormData = { ...formData };
+        if (getResp.data && typeof getResp.data === "string") {
+          const $resp = require("cheerio").load(getResp.data);
+          $resp("input[name]").each((_, el) => {
+            const name = $resp(el).attr("name");
+            const value = $resp(el).attr("value") || "";
+            if (name) sessionFormData[name] = value;
+          });
+        }
+
+        if (Object.keys(sessionFormData).length === 0) continue;
+
+        // Extract cookies from response
+        const setCookies = getResp.headers?.["set-cookie"];
+        let cookieStr = "";
+        if (setCookies) {
+          cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
+        }
 
         // POST to /links/go with XMLHttpRequest header
         const goResp = await client.post(
           `${domain}/links/go`,
-          new URLSearchParams(formData).toString(),
+          new URLSearchParams(sessionFormData).toString(),
           {
             headers: {
               "x-requested-with": "XMLHttpRequest",
               referer: targetUrl,
               "content-type": "application/x-www-form-urlencoded",
               "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              ...(cookieStr ? { Cookie: cookieStr } : {}),
             },
             timeout: 20000,
           }

@@ -128,6 +128,7 @@ async function resolveUrl(url, maxDepth = 15) {
         const $ = load(html);
         let found = null;
 
+        // Try handlers first, even if Cloudflare is detected
         for (const handler of handlers) {
           if (handler.canHandle(current)) {
             found = await handler.extract($, html, current);
@@ -138,12 +139,13 @@ async function resolveUrl(url, maxDepth = 15) {
           }
         }
 
+        if (!found && cloudflareDetected) {
+          chain.push({ note: "Cloudflare detected - cannot bypass via HTTP", final: true });
+          return { resolved: current, chain, depth, cloudflare: cloudflareDetected };
+        }
+
         if (!found) {
-          if (cloudflareDetected) {
-            chain.push({ note: "Cloudflare detected - cannot bypass via HTTP", final: true });
-          } else {
-            chain.push({ final: true });
-          }
+          chain.push({ final: true });
           return { resolved: current, chain, depth, cloudflare: cloudflareDetected };
         }
 
