@@ -22,44 +22,39 @@ async function solveShrinkme(browser, url, timeout = 45000) {
     logs.push({ step: "navigating", url });
 
     // Navigate to shrinkme page
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 25000 });
     logs.push({ step: "page-loaded" });
 
-    // Wait for Cloudflare challenge to resolve (if present)
-    try {
-      await page.waitForFunction(
-        () => {
-          return (
-            document.querySelector('input[name]') !== null ||
-            document.querySelector('form') !== null ||
-            !document.title.includes("Just a moment")
-          );
-        },
-        { timeout: 15000 }
-      );
-    } catch (e) {
-      logs.push({ step: "cloudflare-wait-timeout" });
-    }
+    // Wait for page to fully load and Cloudflare to resolve
+    await new Promise((r) => setTimeout(r, 5000));
 
-    // Wait a bit more for page to fully load
-    await new Promise((r) => setTimeout(r, 3000));
-
-    // Extract form data
-    const formData = await page.evaluate(() => {
-      const data = {};
-      document.querySelectorAll("input[name]").forEach((el) => {
-        data[el.name] = el.value || "";
-      });
-      return data;
+    // Check for Cloudflare challenge and wait
+    const isCloudflare = await page.evaluate(() => {
+      return document.title.includes("Just a moment") || 
+             document.querySelector("#challenge-running") !== null ||
+             document.querySelector(".cf-browser-verification") !== null;
     });
 
-    logs.push({ step: "form-extracted", fields: Object.keys(formData).length });
+    if (isCloudflare) {
+      logs.push({ step: "cloudflare-detected-waiting" });
+      // Wait up to 20 seconds for Cloudflare to resolve
+      try {
+        await page.waitForFunction(
+          () => !document.title.includes("Just a moment") && 
+                document.querySelector("#challenge-running") === null,
+          { timeout: 20000 }
+        );
+        logs.push({ step: "cloudflare-resolved" });
+      } catch (e) {
+        logs.push({ step: "cloudflare-timeout" });
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
 
-    if (Object.keys(formData).length === 0) {
-      // Try waiting more and check for recaptcha
-      await new Promise((r) => setTimeout(r, 5000));
-      
-      const retryFormData = await page.evaluate(() => {
+    // Now try to extract form data (may need multiple attempts)
+    let formData = {};
+    for (let attempt = 0; attempt < 3; attempt++) {
+      formData = await page.evaluate(() => {
         const data = {};
         document.querySelectorAll("input[name]").forEach((el) => {
           data[el.name] = el.value || "";
@@ -67,17 +62,34 @@ async function solveShrinkme(browser, url, timeout = 45000) {
         return data;
       });
 
-      if (Object.keys(retryFormData).length === 0) {
-        return { success: false, error: "No form data found", logs };
+      logs.push({ step: `form-extract-attempt-${attempt}`, fields: Object.keys(formData).length });
+
+      if (Object.keys(formData).length > 0) break;
+      
+      // Wait and retry
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+
+    if (Object.keys(formData).length === 0) {
+      // Last resort: check if there's a recaptcha that needs solving
+      const hasRecaptcha = await page.evaluate(() => {
+        return document.querySelector(".g-recaptcha") !== null || 
+               document.querySelector("[data-sitekey]") !== null;
+      });
+      
+      if (hasRecaptcha) {
+        logs.push({ step: "recaptcha-found-cannot-solve-automatically" });
+        return { success: false, error: "reCAPTCHA present - cannot solve automatically", logs };
       }
-      Object.assign(formData, retryFormData);
+      
+      return { success: false, error: "No form data found after all attempts", logs };
     }
 
     // Get current URL for referer
     const currentUrl = page.url();
     const domain = new URL(currentUrl).origin;
 
-    logs.push({ step: "posting-to-links-go" });
+    logs.push({ step: "posting-to-links-go", domain });
 
     // POST to /links/go using page context (keeps cookies)
     const result = await page.evaluate(
