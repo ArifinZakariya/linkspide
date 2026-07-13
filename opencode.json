@@ -1,29 +1,19 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "command": {
-    "deploy": {
-      "description": "Commit, push ke GitHub, dan trigger Vercel deploy",
-      "template": "Lakukan langkah-langkah berikut secara berurutan: 1) Jalankan git status untuk melihat perubahan, 2) Jalankan git add . untuk stage semua file, 3) Buat commit dengan pesan yang deskriptif sesuai perubahan yang ada, 4) Jalankan git push untuk push ke GitHub, 5) Konfirmasi bahwa push berhasil dan Vercel akan auto-deploy"
-    }
-  },
   "provider": {
-    "claudefire": {
+    "marketku": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Claude Fire",
+      "name": "MarketKu",
       "options": {
-        "baseURL": "http://localhost:20128/v1"
+        "baseURL": "https://router.marketku.id/v1",
+        "apiKey": "sk-15a17714952847cb-2gkax8-7bc1580f"
       },
       "models": {
-        "claude-fable-5": {},
-        "claude-opus-4.8": {},
-        "claude-opus-4.7": {},
-        "claude-opus-4.6": {},
-        "claude-opus-4.8-thinking": {},
-        "claude-sonnet-4.6": {},
-        "claude-sonnet-4.5-thinking": {},
-        "claude-sonnet-4.5-thinking-agentic": {},
-        "claude-haiku-4.5": {}
+        "mk/sonnet-4.5": {
+          "name": "Sonnet 4.5"
+        }
       }
     }
-  }
+  },
+  "model": "marketku/mk/sonnet-4.5"
 }

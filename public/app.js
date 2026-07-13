@@ -132,11 +132,10 @@ async function resolve() {
 
 // ===== Tabs =====
 function switchTab(name) {
-  const tabs = ["bypass", "video", "share"];
+  const tabs = ["bypass", "stream"];
   const map = {
     bypass: { tab: "tabBypass", panel: "panelBypass" },
-    video: { tab: "tabVideo", panel: "panelVideo" },
-    share: { tab: "tabShare", panel: "panelShare" },
+    stream: { tab: "tabStream", panel: "panelStream" },
   };
   tabs.forEach((t) => {
     const active = t === name;
@@ -145,107 +144,440 @@ function switchTab(name) {
   });
 }
 
-// ===== Video Downloader =====
-function fmtDuration(sec) {
-  if (!sec && sec !== 0) return "";
-  sec = Math.round(sec);
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  const pad = (n) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+// ===== LINK STREAMING =====
+const WYZIE_KEY = "wyzie-61f7quy31m8al8ll5m09l9lazhlvrd07";
+let streamHistory = [];
+let subTrackKey = 0;
+let suggestDebounce = null;
+
+function isArchiveExt(name) {
+  const n = (name || "").toLowerCase();
+  return n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".7z");
+}
+function isArchiveLink(url) {
+  try { const p = new URL(url); return isArchiveExt(p.pathname); } catch { return false; }
 }
 
-function setVideoStatus(msg, type = "") {
-  const s = el("videoStatus");
-  if (!msg) { s.classList.add("hidden"); return; }
+function showStreamError(msg) {
+  const e = el("streamError");
+  e.textContent = msg;
+  show("streamError");
+}
+function hideStreamError() { hide("streamError"); }
+
+function showSubStatus(msg, type) {
+  const s = el("streamSubStatus");
   s.textContent = msg;
-  s.className = "status " + type;
-  s.classList.remove("hidden");
+  s.className = "sub-status " + (type || "ok");
+  show("streamSubStatus");
+}
+function hideSubStatus() { hide("streamSubStatus"); }
+
+function showSubSearchStatus(msg, type, loading) {
+  const s = el("subSearchStatus");
+  s.innerHTML = (loading ? '<span class="spinner-anim"></span> ' : '') + msg;
+  s.className = "sub-status " + (type || "ok");
+  show("subSearchStatus");
 }
 
-let videoDownloadBase = "";
-
-async function fetchVideo() {
-  let url = normalizeUrl(el("videoInput").value);
-  if (!url) { el("videoInput").focus(); return; }
-  el("videoInput").value = url;
-
-  const btn = el("fetchBtn");
-  btn.disabled = true;
-  btn.querySelector(".btn-text").textContent = "Memuat...";
-  hide("videoResult");
-  hide("videoPlatformBadge");
-  setVideoStatus("Mengambil info video...", "loading");
-  videoDownloadBase = "";
-
+function guessSubtitleUrl(videoUrl) {
   try {
-    const r = await fetch("/api/video/info", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url })
-    });
-    const d = await r.json();
-    if (!d.success) throw new Error(d.error || "Gagal mengambil video");
+    const u = new URL(videoUrl);
+    const ext = u.pathname.match(/\.(mp4|mkv|avi|webm|mov|ts)$/i);
+    if (!ext) return null;
+    return `${u.origin}${u.pathname.substring(0, u.pathname.length - ext[0].length)}.srt`;
+  } catch { return null; }
+}
 
-    el("videoPlatformName").textContent = d.platform + (d.shorts ? " · Shorts" : "");
-    show("videoPlatformBadge");
+function getPixelDrainSubUrls(videoUrl) {
+  try {
+    const u = new URL(videoUrl);
+    if (!u.hostname.includes("pixeldrain.com")) return [];
+    const parts = u.pathname.split("/");
+    const idx = parts.indexOf("u");
+    if (idx === -1 || !parts[idx + 1]) return [];
+    const id = parts[idx + 1];
+    return [
+      `https://pixeldrain.com/api/file/${id}.srt`,
+      `https://pixeldrain.com/api/file/${id}.vtt`,
+      `https://pixeldrain.com/api/file/${id}.ass`,
+    ];
+  } catch { return []; }
+}
 
-    el("videoThumb").src = d.thumbnail || "";
-    el("videoThumb").style.display = d.thumbnail ? "block" : "none";
-    el("videoTitle").textContent = d.title || "Tanpa judul";
-    el("videoUploader").textContent = d.uploader || "";
-    el("videoDuration").textContent = d.duration ? fmtDuration(d.duration) : "";
+async function tryAutoSubtitle(videoUrl) {
+  const candidates = [guessSubtitleUrl(videoUrl), ...getPixelDrainSubUrls(videoUrl)].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      const encoded = encodeURIComponent(candidate);
+      applySubtitleTrack(`/api/stream/subtitle?url=${encoded}`);
+      showSubStatus(`Subtitle found: ${candidate.split("/").pop()}`);
+      return true;
+    } catch {}
+  }
+  return false;
+}
 
-    el("videoTags").innerHTML =
-      '<span class="tag tag-service">' + d.platform + '</span>' +
-      (d.shorts ? '<span class="tag tag-speed">Shorts</span>' : '') +
-      '<span class="tag tag-steps">' + (d.qualities || d.formats || []).length + ' format</span>';
+function applySubtitleTrack(subUrl) {
+  const video = el("streamVideo");
+  const existing = video.querySelector("track");
+  if (existing) existing.remove();
+  if (!subUrl) { el("subToggleBtn").textContent = "No sub"; return; }
+  const track = document.createElement("track");
+  subTrackKey++;
+  track.src = subUrl;
+  track.kind = "subtitles";
+  track.srcLang = "en";
+  track.label = "Subtitles";
+  track.default = true;
+  track.onerror = function() {
+    const btn = el("subToggleBtn");
+    if (btn && btn.textContent !== "No sub") {
+      showSubStatus("Failed to load subtitle", "error");
+    }
+  };
+  track.onload = function() {
+    showSubStatus("Subtitle ready", "ok");
+  };
+  video.appendChild(track);
+  video.textTracks[video.textTracks.length - 1].mode = "showing";
+  el("subToggleBtn").textContent = "Toggle";
+}
 
-    videoDownloadBase = d.downloadBase || "";
-    renderQualities(url, d.qualities || d.formats || []);
-    show("videoResult");
-    setVideoStatus("", "");
-  } catch (e) {
-    setVideoStatus(e.message, "error");
-  } finally {
-    btn.disabled = false;
-    btn.querySelector(".btn-text").textContent = "Cari";
+async function loadSubtitle() {
+  const subUrl = el("subUrlInput").value.trim();
+  if (!subUrl) return;
+  showSubStatus("Loading subtitle...", "ok");
+  try {
+    applySubtitleTrack(`/api/stream/subtitle?url=${encodeURIComponent(subUrl)}`);
+    showSubStatus("Subtitle loaded", "ok");
+  } catch (e) { showSubStatus("Failed: " + e.message, "error"); }
+}
+
+function toggleSubtitles() {
+  const video = el("streamVideo");
+  if (!video) return;
+  for (let i = 0; i < video.textTracks.length; i++) {
+    video.textTracks[i].mode = video.textTracks[i].mode === "showing" ? "hidden" : "showing";
   }
 }
 
-function renderQualities(url, qualities) {
-  const list = el("qualityList");
-  list.innerHTML = "";
-  const base = videoDownloadBase || "/api/video/download";
-  qualities.forEach((q) => {
-    const params = new URLSearchParams({
-      url,
-      format: q.format,
-      ext: q.ext || "mp4",
-      audio: q.audioOnly ? "1" : "0"
-    });
-    const a = document.createElement("a");
-    a.className = "quality-item" + (q.audioOnly ? " audio" : "");
-    a.href = base + "?" + params.toString();
-    a.setAttribute("download", "");
-    a.innerHTML =
-      '<span class="q-name">' + q.quality +
-      (q.fps && q.fps > 30 ? ' <span class="q-fps">' + q.fps + 'fps</span>' : '') +
-      '</span>' +
-      '<span class="q-ext">' + (q.ext || "mp4").toUpperCase() + '</span>' +
-      '<span class="q-dl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span>';
-    a.addEventListener("click", () => {
-      setVideoStatus("Download dimulai... (proses di server bisa butuh beberapa detik)", "loading");
-      setTimeout(() => setVideoStatus("", ""), 6000);
-    });
-    list.appendChild(a);
+async function searchWyzie(imdbId, lang) {
+  if (!imdbId) return [];
+  try {
+    const params = new URLSearchParams({ id: imdbId, key: WYZIE_KEY, source: "all" });
+    if (lang) params.set("language", lang);
+    const res = await fetch(`https://sub.wyzie.io/search?${params}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+
+async function searchByTitle() {
+  const t = el("titleInput").value.trim();
+  if (!t) return;
+  const lang = el("subLangSelect").value;
+  showSubSearchStatus("Searching...", "ok", true);
+  el("subResults").innerHTML = "";
+  try {
+    const metaRes = await fetch(`/api/stream/metadata?url=x&title=${encodeURIComponent(t)}`);
+    const meta = await metaRes.json();
+    if (meta.imdbId) {
+      el("imdbBadge").textContent = meta.imdbId;
+      show("imdbBadge");
+      el("movieTitle").textContent = meta.title || t;
+      show("movieInfo");
+      const results = await searchWyzie(meta.imdbId, lang);
+      let finalResults = results;
+      if (results.length === 0 && lang !== "en") {
+        finalResults = await searchWyzie(meta.imdbId, "en");
+        if (finalResults.length > 0) showSubSearchStatus(`Found ${finalResults.length} subtitle(s) (English)`, "ok", false);
+      }
+      if (finalResults.length > 0) {
+        renderSubResults(finalResults);
+        showSubSearchStatus(`Found ${finalResults.length} subtitle(s) for ${meta.title || t}`, "ok", false);
+        const best = finalResults[0];
+        showSubStatus(`Loading: ${best.display}...`, "ok");
+        const srtUrl = `/api/stream/subtitle?url=${encodeURIComponent(convertWyzieUrl(best.url, best.format))}`;
+        applySubtitleTrack(srtUrl);
+        showSubStatus(`Auto-loaded: ${best.display}`, "ok");
+      } else {
+        showSubSearchStatus("No subtitles found", "error", false);
+      }
+    } else {
+      showSubSearchStatus("Could not find IMDB ID for this title", "error", false);
+    }
+  } catch (e) {
+    showSubSearchStatus("Search failed: " + e.message, "error", false);
+  }
+}
+
+function renderSubResults(subs) {
+  const container = el("subResults");
+  container.innerHTML = "";
+  show("subResults");
+  subs.slice(0, 15).forEach((sub, i) => {
+    const btn = document.createElement("button");
+    btn.className = "sub-result-chip" + (i === 0 ? " auto-loaded" : "");
+    btn.innerHTML =
+      (sub.flagUrl ? `<img src="${sub.flagUrl}" alt="" class="flag-icon">` : '') +
+      `<span class="sub-lang-name">${sub.display}</span>` +
+      (sub.release ? `<span class="sub-release">${sub.release}</span>` : '') +
+      `<span class="sub-source">${sub.source}</span>` +
+      `<span class="sub-format">${sub.format}</span>` +
+      (sub.isHearingImpaired ? '<span class="hi-tag">HI</span>' : '') +
+      (i === 0 ? '<span class="auto-tag">AUTO</span>' : '');
+    btn.onclick = () => loadWyzieSub(sub);
+    container.appendChild(btn);
   });
 }
 
-el("videoInput").addEventListener("keydown", e => { if (e.key === "Enter") fetchVideo(); });
+function convertWyzieUrl(url, format) {
+  if (!url) return url;
+  const vrfMatch = url.match(/vrf-([a-f0-9]+)/i);
+  const fileIdMatch = url.match(/\/file\/(\d+)/);
+  if (vrfMatch && fileIdMatch) {
+    const fmt = (format || "srt").toLowerCase();
+    return `https://sub.wyzie.io/c/${vrfMatch[1]}/id/${fileIdMatch[1]}?format=${fmt}`;
+  }
+  return url;
+}
 
+async function loadWyzieSub(sub) {
+  showSubStatus(`Loading: ${sub.display}...`, "ok");
+  try {
+    const downloadUrl = convertWyzieUrl(sub.url, sub.format);
+    if (!downloadUrl) throw new Error("No download URL");
+    const srtUrl = `/api/stream/subtitle?url=${encodeURIComponent(downloadUrl)}`;
+    applySubtitleTrack(srtUrl);
+    showSubStatus(`Loaded: ${sub.display} (${sub.release})`, "ok");
+  } catch (e) {
+    showSubStatus("Failed: " + e.message, "error");
+  }
+}
+
+async function detectUrlType(url) {
+  if (isArchiveLink(url)) return "archive";
+  try {
+    const res = await fetch(`/api/stream/archive?url=${encodeURIComponent(url)}&action=info`);
+    if (!res.ok) return "video";
+    const info = await res.json();
+    if (isArchiveExt(info.name)) return "archive";
+    return "video";
+  } catch { return "video"; }
+}
+
+async function loadArchiveContents(archiveUrl) {
+  el("archiveLoading").innerHTML = '<span class="spinner-anim"></span><span>Loading archive contents...</span>';
+  show("archiveLoading");
+  el("archiveList").innerHTML = "";
+  try {
+    const res = await fetch(`/api/stream/archive?url=${encodeURIComponent(archiveUrl)}&action=list`);
+    if (!res.ok) throw new Error("Failed to load archive");
+    const data = await res.json();
+    renderArchiveFiles(data.files || [], archiveUrl);
+    hide("archiveLoading");
+  } catch (e) {
+    hide("archiveLoading");
+    showStreamError("Failed to load archive: " + e.message);
+  }
+}
+
+function renderArchiveFiles(files, archiveUrl) {
+  const list = el("archiveList");
+  list.innerHTML = "";
+  show("archiveFiles");
+  files.forEach((file, i) => {
+    const btn = document.createElement("button");
+    btn.className = "archive-item";
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    const ext = (file.name.split(".").pop() || "").toUpperCase();
+    btn.innerHTML =
+      '<span class="archive-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>' +
+      `<span class="archive-name">${file.name}</span>` +
+      `<span class="archive-size">${ext} &middot; ${sizeMB} MB</span>`;
+    btn.onclick = () => {
+      const encoded = encodeURIComponent(archiveUrl);
+      const encodedFile = encodeURIComponent(JSON.stringify(file));
+      setStreamUrl(`/api/stream/archive?url=${encoded}&action=stream&file=${encodedFile}`);
+      document.querySelectorAll(".archive-item").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    };
+    list.appendChild(btn);
+  });
+}
+
+function setStreamUrl(url) {
+  const video = el("streamVideo");
+  video.src = url;
+  show("playerWrapper");
+  video.onloadedmetadata = () => {
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = "showing";
+    }
+  };
+}
+
+async function handleStream() {
+  const urlInput = el("streamUrlInput");
+  let url = normalizeUrl(urlInput.value);
+  if (!url) { urlInput.focus(); return; }
+  urlInput.value = url;
+  hideStreamError();
+  el("streamError").classList.add("hidden");
+  el("subResults").innerHTML = "";
+  hide("subResults");
+  el("archiveList").innerHTML = "";
+  hide("archiveFiles");
+
+  const btn = el("streamBtn");
+  btn.disabled = true;
+  btn.querySelector(".btn-text").textContent = "Loading...";
+
+  try {
+    if (isArchiveLink(url)) {
+      await loadArchiveContents(url);
+      btn.disabled = false;
+      btn.querySelector(".btn-text").textContent = "Stream";
+      return;
+    }
+    const type = await detectUrlType(url);
+    if (type === "archive") {
+      await loadArchiveContents(url);
+      btn.disabled = false;
+      btn.querySelector(".btn-text").textContent = "Stream";
+      return;
+    }
+    const encoded = encodeURIComponent(url);
+    const proxyUrl = `/api/stream/stream?url=${encoded}`;
+    const res = await fetch(`/api/stream/stream?url=${encoded}`, { method: "HEAD" });
+    if (!res.ok) throw new Error(`Cannot fetch video (HTTP ${res.status})`);
+    setStreamUrl(proxyUrl);
+    streamHistory = [{ url, time: new Date().toLocaleTimeString() }, ...streamHistory.filter(h => h.url !== url)].slice(0, 10);
+    renderHistory();
+    const subUrl = el("subUrlInput").value.trim();
+    if (subUrl) {
+      await loadSubtitle();
+    } else {
+      await tryAutoSubtitle(url);
+    }
+  } catch (e) {
+    showStreamError(e.message || "Failed to load video");
+  } finally {
+    btn.disabled = false;
+    btn.querySelector(".btn-text").textContent = "Stream";
+  }
+}
+
+function renderHistory() {
+  if (streamHistory.length === 0) { hide("streamHistory"); return; }
+  const ul = el("historyList");
+  ul.innerHTML = "";
+  show("streamHistory");
+  streamHistory.forEach((h) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="history-url">${h.url}</span><span class="history-time">${h.time}</span>`;
+    li.onclick = () => { el("streamUrlInput").value = h.url; handleStream(); };
+    ul.appendChild(li);
+  });
+}
+
+// ===== Event Listeners =====
 el("urlInput").addEventListener("keydown", e => { if (e.key === "Enter") resolve(); });
+el("streamUrlInput").addEventListener("keydown", e => { if (e.key === "Enter") handleStream(); });
+el("subUrlInput").addEventListener("keydown", e => { if (e.key === "Enter") loadSubtitle(); });
+
+el("titleInput").addEventListener("input", () => {
+  const val = el("titleInput").value;
+  if (suggestDebounce) clearTimeout(suggestDebounce);
+  if (!val || val.length < 2) { hide("suggestDropdown"); return; }
+  suggestDebounce = setTimeout(async () => {
+    const lang = el("subLangSelect").value;
+    try {
+      const res = await fetch(`/api/stream/search?q=${encodeURIComponent(val)}&lang=${lang}`);
+      const data = await res.json();
+      renderSuggestions(data.results || []);
+    } catch { hide("suggestDropdown"); }
+  }, 350);
+});
+
+el("titleInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && el("suggestDropdown").classList.contains("hidden")) searchByTitle();
+});
+
+function renderSuggestions(results) {
+  const dd = el("suggestDropdown");
+  dd.innerHTML = "";
+  if (results.length === 0) {
+    dd.innerHTML = '<div class="suggest-empty">No results</div>';
+  } else {
+    results.forEach((item) => {
+      const btn = document.createElement("button");
+      btn.className = "suggest-item";
+      btn.innerHTML =
+        (item.poster ? `<img src="${item.poster}" alt="" class="suggest-poster">` : '') +
+        '<div class="suggest-info">' +
+          `<span class="suggest-title">${item.title}</span>` +
+          `<span class="suggest-meta">${item.year} &middot; ${item.type === "tv" ? "TV Series" : "Movie"}</span>` +
+          (item.langBreakdown && item.langBreakdown.length > 0 ?
+            `<span class="suggest-langs">${item.langBreakdown.slice(0, 4).map(l => `<span class="suggest-lang-tag">${l.lang} (${l.count})</span>`).join('')}</span>` : '') +
+        '</div>' +
+        '<div class="suggest-sub-info">' +
+          (item.available ?
+            `<span class="suggest-sub-available">${item.count} sub${item.count > 1 ? 's' : ''}</span>` :
+            '<span class="suggest-sub-none">No subs</span>') +
+        '</div>';
+      btn.onclick = () => selectSuggestion(item);
+      dd.appendChild(btn);
+    });
+  }
+  show("suggestDropdown");
+}
+
+function selectSuggestion(item) {
+  el("titleInput").value = item.title;
+  hide("suggestDropdown");
+  if (item.imdbId) {
+    el("imdbBadge").textContent = item.imdbId;
+    show("imdbBadge");
+    el("movieTitle").textContent = item.title;
+    show("movieInfo");
+    searchWyzie(item.imdbId, el("subLangSelect").value).then((results) => {
+      if (results.length > 0) {
+        renderSubResults(results);
+        showSubSearchStatus(`Found ${results.length} subtitle(s) for ${item.title}`, "ok", false);
+        const best = results[0];
+        showSubStatus(`Loading: ${best.display}...`, "ok");
+        const srtUrl = `/api/stream/subtitle?url=${encodeURIComponent(convertWyzieUrl(best.url, best.format))}`;
+        applySubtitleTrack(srtUrl);
+        showSubStatus(`Auto-loaded: ${best.display}`, "ok");
+      } else {
+        showSubSearchStatus("No subtitles found", "error", false);
+      }
+    });
+  }
+}
+
+document.addEventListener("mousedown", (e) => {
+  const dd = el("suggestDropdown");
+  const ti = el("titleInput");
+  if (dd && ti && !dd.contains(e.target) && !ti.contains(e.target)) hide("suggestDropdown");
+});
+
+el("subSizeSlider").addEventListener("input", (e) => {
+  el("subSizeValue").textContent = e.target.value + "%";
+  const video = el("streamVideo");
+  if (video) video.style.setProperty("--sub-scale", e.target.value / 100);
+});
+
+const streamVideo = el("streamVideo");
+if (streamVideo) {
+  streamVideo.style.setProperty("--sub-scale", 1);
+  streamVideo.addEventListener("fullscreenchange", () => {
+    const slider = el("subSizeSlider");
+    if (slider) streamVideo.style.setProperty("--sub-scale", slider.value / 100);
+  });
+}
 
 el("urlInput").addEventListener("input", async () => {
   const url = normalizeUrl(el("urlInput").value);
