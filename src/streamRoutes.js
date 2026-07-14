@@ -515,41 +515,50 @@ async function getFilenameFromUrl(videoUrl) {
   return null;
 }
 async function searchTMDB(title, season, episode) {
-  const queries = [];
-  if (title) queries.push(title);
   const cleaned = title.replace(/[:\-–—]/g, " ").replace(/\s+/g, " ").trim();
+  const queries = [title];
   if (cleaned !== title) queries.push(cleaned);
-  for (const q of queries) {
+
+  async function searchTV() {
+    for (const q of queries) {
+      try {
+        const res = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`);
+        const data = await res.json();
+        if (!data.results || data.results.length === 0) continue;
+        let best = null;
+        for (const r of data.results) { if (r.vote_count < 1) continue; if (season && r.number_of_seasons && r.number_of_seasons < season) continue; best = r; break; }
+        if (!best && data.results.length > 0) best = data.results[0];
+        if (!best) continue;
+        const detailRes = await fetch(`https://api.themoviedb.org/3/tv/${best.id}?api_key=${TMDB_KEY}&append_to_response=external_ids`);
+        const detail = await detailRes.json();
+        const imdbId = detail.external_ids?.imdb_id;
+        if (imdbId) {
+          let matchedEp = null;
+          if (season && episode && detail.seasons) { const s = detail.seasons.find((s) => s.season_number === season); if (s) matchedEp = `${s.name || `Season ${season}`} - Episode ${episode}`; }
+          return { title: detail.name || best.name, imdbId, tmdbId: best.id, type: "tv", season, episode, matchedEp, overview: detail.overview || "" };
+        }
+      } catch {}
+    }
+    return null;
+  }
+
+  async function searchMovie() {
     try {
-      const res = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`);
+      const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&include_adult=false`);
       const data = await res.json();
-      if (!data.results || data.results.length === 0) continue;
-      let best = null;
-      for (const r of data.results) { if (r.vote_count < 1) continue; if (season && r.number_of_seasons && r.number_of_seasons < season) continue; best = r; break; }
-      if (!best && data.results.length > 0) best = data.results[0];
-      if (!best) continue;
-      const detailRes = await fetch(`https://api.themoviedb.org/3/tv/${best.id}?api_key=${TMDB_KEY}&append_to_response=external_ids`);
-      const detail = await detailRes.json();
-      const imdbId = detail.external_ids?.imdb_id;
-      if (imdbId) {
-        let matchedEp = null;
-        if (season && episode && detail.seasons) { const s = detail.seasons.find((s) => s.season_number === season); if (s) matchedEp = `${s.name || `Season ${season}`} - Episode ${episode}`; }
-        return { title: detail.name || best.name, imdbId, tmdbId: best.id, type: "tv", season, episode, matchedEp, overview: detail.overview || "" };
+      if (data.results && data.results.length > 0) {
+        const movie = data.results.find((r) => r.vote_count > 0) || data.results[0];
+        const detailRes = await fetch(`https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids`);
+        const detail = await detailRes.json();
+        const imdbId = detail.external_ids?.imdb_id;
+        if (imdbId) return { title: detail.title || movie.title, imdbId, tmdbId: movie.id, type: "movie", season: null, episode: null, matchedEp: null, overview: detail.overview || "" };
       }
     } catch {}
+    return null;
   }
-  try {
-    const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&include_adult=false`);
-    const data = await res.json();
-    if (data.results && data.results.length > 0) {
-      const movie = data.results.find((r) => r.vote_count > 0) || data.results[0];
-      const detailRes = await fetch(`https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_KEY}&append_to_response=external_ids`);
-      const detail = await detailRes.json();
-      const imdbId = detail.external_ids?.imdb_id;
-      if (imdbId) return { title: detail.title || movie.title, imdbId, tmdbId: movie.id, type: "movie", season: null, episode: null, matchedEp: null, overview: detail.overview || "" };
-    }
-  } catch {}
-  return null;
+
+  const [tvResult, movieResult] = await Promise.all([searchTV(), searchMovie()]);
+  return tvResult || movieResult;
 }
 
 router.get("/metadata", async (req, res) => {

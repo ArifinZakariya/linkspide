@@ -312,13 +312,25 @@ async function searchByTitle() {
   }
 }
 
-function renderSubResults(subs) {
+let allSubResults = [];
+let subPage = 0;
+const SUB_PAGE_SIZE = 20;
+
+function renderSubResults(subs, reset = true) {
   const container = el("subResults");
-  container.innerHTML = "";
+  if (reset) {
+    container.innerHTML = "";
+    allSubResults = subs;
+    subPage = 0;
+  }
   show("subResults");
-  subs.slice(0, 15).forEach((sub, i) => {
+  const start = subPage * SUB_PAGE_SIZE;
+  const end = Math.min(start + SUB_PAGE_SIZE, allSubResults.length);
+  const slice = allSubResults.slice(start, end);
+  slice.forEach((sub, i) => {
+    const idx = start + i;
     const btn = document.createElement("button");
-    btn.className = "sub-result-chip" + (i === 0 ? " auto-loaded" : "");
+    btn.className = "sub-result-chip" + (idx === 0 ? " auto-loaded" : "");
     btn.innerHTML =
       (sub.flagUrl ? `<img src="${sub.flagUrl}" alt="" class="flag-icon">` : '') +
       `<span class="sub-lang-name">${sub.display}</span>` +
@@ -326,10 +338,19 @@ function renderSubResults(subs) {
       `<span class="sub-source">${sub.source}</span>` +
       `<span class="sub-format">${sub.format}</span>` +
       (sub.isHearingImpaired ? '<span class="hi-tag">HI</span>' : '') +
-      (i === 0 ? '<span class="auto-tag">AUTO</span>' : '');
+      (idx === 0 ? '<span class="auto-tag">AUTO</span>' : '');
     btn.onclick = () => loadWyzieSub(sub);
     container.appendChild(btn);
   });
+  const existingBtn = container.querySelector(".load-more-btn");
+  if (existingBtn) existingBtn.remove();
+  if (end < allSubResults.length) {
+    const loadMore = document.createElement("button");
+    loadMore.className = "load-more-btn";
+    loadMore.innerHTML = `Load More <span class="load-more-count">${allSubResults.length - end} remaining</span>`;
+    loadMore.onclick = () => { subPage++; renderSubResults(allSubResults, false); };
+    container.appendChild(loadMore);
+  }
 }
 
 function convertWyzieUrl(url, format) {
