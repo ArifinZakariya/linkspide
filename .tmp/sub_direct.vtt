@@ -1,0 +1,305 @@
+[Script Info]
+; This is an Advanced Sub Station Alpha v4+ script.
+Title: subtitles
+ScriptType: v4.00+
+Collisions: Normal
+PlayDepth: 0
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H0300FFFF,&H00000000,&H02000000,0,0,0,0,100,100,0,0,1,2,1,2,10,10,10,1
+[Events]
+Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:05.89,0:00:12.05,Default,,0,0,0,,{\i1}Dahulu kala, rubah iblis yang kuat{\i0} {\i1}muncul dengan sembilan ekor.{\i0} {\i1} 
+Dialogue: 0,0:00:12.96,0:00:13.99,Default,,0,0,0,,Dengan ekornya yang kuat,{\i0} 
+Dialogue: 0,0:00:14.06,0:00:17.19,Default,,0,0,0,,{\i1}bisa menghancurkan pegunungan{\i0} {\i1}dan menciptakan gelombang pasang.{\i0} { 
+Dialogue: 0,0:00:17.77,0:00:22.57,Default,,0,0,0,,\i1}Sekelompok Ninja bangkit untuk{\i0} {\i1}mempertahankan desa mereka dari serangan.{\i0} 
+Dialogue: 0,0:00:23.00,0:00:25.60,Default,,0,0,0,,Kita harus menunggu sampai Hokage Keempat tiba di sini! 
+Dialogue: 0,0:00:25.84,0:00:28.17,Default,,0,0,0,,Kita tidak bisa membiarkannya mendekati desa kita! 
+Dialogue: 0,0:00:32.01,0:00:38.65,Default,,0,0,0,,{\i1}Satu Ninja hebat mampu{\i0} {\i1}memenjarakan monster,{\i0} 
+Dialogue: 0,0:00:38.95,0:00:40.98,Default,,0,0,0,,{\i1}namun mati dalam prosesnya.{\i0} 
+Dialogue: 0,0:00:41.42,0:00:47.26,Default,,0,0,0,,{\i1}Ninja ini dikenal sebagai. ..{\i0} {\i1}Hokage Keempat.{\i0} 
+Dialogue: 0,0:01:03.58,0:01:04.60,Default,,0,0,0,,Naruto! 
+Dialogue: 0,0:01:04.81,0:01:06.71,Default,,0,0,0,,Kenapa kamu melakukan hal seperti itu?! 
+Dialogue: 0,0:01:07.15,0:01:09.14,Default,,0,0,0,,Anda benar-benar akan mendapatkannya kali ini! 
+Dialogue: 0,0:01:14.82,0:01:16.19,Default,,0,0,0,,Saya tidak peduli! 
+Dialogue: 0,0:01:16.99,0:01:18.52,Default,,0,0,0,,Anda tahu masalah Anda? 
+Dialogue: 0,0:01:18.66,0:01:20.89,Default,,0,0,0,,Anda tidak dapat melakukan hal-hal yang saya lakukan!
+Dialogue: 0,0:01:21.20,0:01:22.99,Default,,0,0,0,,Hanya saya yang bisa melakukan ini! 
+Dialogue: 0,0:01:23.20,0:01:25.39,Default,,0,0,0,,Aku lebih baik dari kalian semua! Percaya itu! 
+Dialogue: 0,0:01:25.80,0:01:26.96,Default,,0,0,0,,Ada masalah, Pak! 
+Dialogue: 0,0:01:27.04,0:01:27.76,Default,,0,0,0,,Tuan Hokage! 
+Dialogue: 0,0:01:28.64,0:01:29.83,Default,,0,0,0,,Apa itu? 
+Dialogue: 0,0:01:29.91,0:01:33.47,Default,,0,0,0,,Apa Naruto melakukan sesuatu lagi? 
+Dialogue: 0,0:01:34.11,0:01:36.74,Default,,0,0,0,,Ya. Dia naik ke Mountainside Images... 
+Dialogue: 0,0:01:36.81,0:01:38.94,Default,,0,0,0,,Dan dia merusak dan membuat grafiti di atasnya! 
+Dialogue: 0,0:01:49.26,0:01:49.95,Default,,0,0,0,,Tunggu! 
+Dialogue: 0,0:01:54.16,0:01:55.19,Default,,0,0,0,,Ha ha... 
+Dialogue: 0,0:01:55.63,0:01:57.29,Default,,0,0,0,,Kenapa harus aku? 
+Dialogue: 0,0:01:58.13,0:01:59.23,Default,,0,0,0,,Hei, Naruto! 
+Dialogue: 0,0:02:03.94,0:02:07.14,Default,,0,0,0,,Bagaimana Anda tiba-tiba sampai di sini, Iruka Sensei? 
+Dialogue: 0,0:02:07.31,0:02:10.14,Default,,0,0,0,,Pertanyaannya adalah apa yang Anda lakukan di sini ketika Anda seharusnya berada di kelas sekarang? 
+Dialogue: 0,0:02:13.08,0:02:14.28,Default,,0,0,0,,Sekarang dengarkan, Naruto. 
+Dialogue: 0,0:02:14.78,0:02:18.88,Default,,0,0,0,,Anda gagal dalam tes kelulusan terakhir dan sebelumnya. 
+Dialogue: 0,0:02:19.12,0:02:21.78,Default,,0,0,0,,Ini bukan waktunya untuk bermain-main, bodoh! 
+Dialogue: 0,0:02:24.03,0:02:27.02,Default,,0,0,0,,Kami akan melakukan tes ulang pada Jutsu Transformasi! 
+Dialogue: 0,0:02:27.26,0:02:29.73,Default,,0,0,0,,Bahkan mereka yang sudah lulus akan menerimanya!
+Dialogue: 0,0:02:29.80,0:02:30.89,Default,,0,0,0,,Apa?! 
+Dialogue: 0,0:02:31.50,0:02:33.47,Default,,0,0,0,,Sakura Haruno. Ini dia... 
+Dialogue: 0,0:02:33.70,0:02:34.19,Default,,0,0,0,,Berubah! 
+Dialogue: 0,0:02:39.31,0:02:40.00,Default,,0,0,0,,OKE! 
+Dialogue: 0,0:02:41.41,0:02:42.81,Default,,0,0,0,,Saya melakukannya! 
+Dialogue: 0,0:02:43.55,0:02:44.91,Default,,0,0,0,,Cha! 
+Dialogue: 0,0:02:45.68,0:02:47.27,Default,,0,0,0,,Apa kau melihatnya, Sasuke? 
+Dialogue: 0,0:02:47.38,0:02:48.98,Default,,0,0,0,,Selanjutnya, Uchiha Sasuke. 
+Dialogue: 0,0:02:49.32,0:02:49.81,Default,,0,0,0,,Ya. 
+Dialogue: 0,0:02:55.42,0:02:56.55,Default,,0,0,0,,Baiklah. 
+Dialogue: 0,0:02:59.96,0:03:01.99,Default,,0,0,0,,Selanjutnya Naruto Uzumaki. 
+Dialogue: 0,0:03:02.67,0:03:04.29,Default,,0,0,0,,Ini benar-benar sakit. 
+Dialogue: 0,0:03:05.23,0:03:06.90,Default,,0,0,0,,Dan itu semua salahmu. 
+Dialogue: 0,0:03:07.00,0:03:08.37,Default,,0,0,0,,Seperti saya peduli!! 
+Dialogue: 0,0:03:11.07,0:03:12.10,Default,,0,0,0,,{\i1}Oke...{\i0} 
+Dialogue: 0,0:03:13.88,0:03:16.61,Default,,0,0,0,,{\i1}Semoga berhasil, Naruto...{\i0} 
+Dialogue: 0,0:03:17.31,0:03:17.97,Default,,0,0,0,,Transformasi! 
+Dialogue: 0,0:03:29.53,0:03:30.18,Default,,0,0,0,,Bagaimana itu? 
+Dialogue: 0,0:03:30.26,0:03:31.59,Default,,0,0,0,,Saya menyebutnya "Jutsu Seksi"! 
+Dialogue: 0,0:03:31.79,0:03:35.82,Default,,0,0,0,,Kamu bodoh! Berhentilah membuat mantra konyol! 
+Dialogue: 0,0:03:40.80,0:03:41.46,Default,,0,0,0,,Sial... 
+Dialogue: 0,0:03:42.40,0:03:43.19,Default,,0,0,0,,Sial... 
+Dialogue: 0,0:03:43.90,0:03:46.96,Default,,0,0,0,,Aku tidak akan membiarkanmu pulang kecuali kamu membersihkan semuanya. 
+Dialogue: 0,0:03:48.57,0:03:49.90,Default,,0,0,0,,Aku tidak peduli... 
+Dialogue: 0,0:03:50.14,0:03:52.47,Default,,0,0,0,,Toh tidak ada orang di rumah. 
+Dialogue: 0,0:03:58.25,0:03:59.11,Default,,0,0,0,,Naruto... 
+Dialogue: 0,0:04:00.68,0:04:02.28,Default,,0,0,0,,Apa lagi kali ini? 
+Dialogue: 0,0:04:02.75,0:04:04.55,Default,,0,0,0,,Yang saya maksud adalah...
+Dialogue: 0,0:04:05.29,0:04:09.78,Default,,0,0,0,,Jika kamu membereskan semua kekacauan itu, aku akan membelikanmu ramen malam ini. 
+Dialogue: 0,0:04:12.46,0:04:13.02,Default,,0,0,0,,Hah?! 
+Dialogue: 0,0:04:14.30,0:04:17.82,Default,,0,0,0,,Ya! Aku akan menyelesaikannya tidak lama lagi! 
+Dialogue: 0,0:04:19.40,0:04:21.27,Default,,0,0,0,,{\i1}Masuk. Naruto Uzumaki!{\i0} 
+Dialogue: 0,0:04:32.75,0:04:33.48,Default,,0,0,0,,Naruto. 
+Dialogue: 0,0:04:35.18,0:04:37.71,Default,,0,0,0,,Mengapa Anda merusak wajah-wajah itu? 
+Dialogue: 0,0:04:38.29,0:04:41.09,Default,,0,0,0,,Apakah kamu tidak tahu siapa pemimpin Hokage? 
+Dialogue: 0,0:04:41.62,0:04:43.02,Default,,0,0,0,,Tentu saja! 
+Dialogue: 0,0:04:49.40,0:04:52.86,Default,,0,0,0,,Saya tahu mereka mendapat gelar Lord Hokage 
+Dialogue: 0,0:04:53.07,0:04:55.54,Default,,0,0,0,,karena mereka adalah Ninja terbaik pada masanya, bukan? 
+Dialogue: 0,0:04:58.61,0:05:00.63,Default,,0,0,0,,Terutama Hokage Keempat adalah pahlawan 
+Dialogue: 0,0:05:00.71,0:05:03.68,Default,,0,0,0,,yang menyelamatkan desa dari iblis rubah berekor sembilan. 
+Dialogue: 0,0:05:04.45,0:05:05.61,Default,,0,0,0,,Lalu mengapa Anda melakukan itu? 
+Dialogue: 0,0:05:05.92,0:05:09.18,Default,,0,0,0,,Karena aku sendiri yang akan menjadi Hokage. 
+Dialogue: 0,0:05:09.69,0:05:13.68,Default,,0,0,0,,Dan aku akan menjadi Hokage terhebat sepanjang masa! 
+Dialogue: 0,0:05:14.26,0:05:18.82,Default,,0,0,0,,Sehingga semua orang akhirnya belajar menerima saya! 
+Dialogue: 0,0:05:20.10,0:05:24.09,Default,,0,0,0,,Omong-omong, Sensei, aku ingin bertanya.
+Dialogue: 0,0:05:24.93,0:05:26.09,Default,,0,0,0,,Anda ingin mangkuk lain? 
+Dialogue: 0,0:05:26.24,0:05:27.57,Default,,0,0,0,,Mmmm... Tidak... 
+Dialogue: 0,0:05:27.67,0:05:30.23,Default,,0,0,0,,Bisakah saya meminjam ikat kepala Daun itu sebentar? 
+Dialogue: 0,0:05:31.27,0:05:31.90,Default,,0,0,0,,Ini? 
+Dialogue: 0,0:05:32.47,0:05:33.46,Default,,0,0,0,,Tidak tidak! 
+Dialogue: 0,0:05:33.91,0:05:38.64,Default,,0,0,0,,Ini hanya dikenakan oleh mereka yang telah lulus dari Akademi Ninja. 
+Dialogue: 0,0:05:39.38,0:05:40.81,Default,,0,0,0,,Besok, kamu akan... 
+Dialogue: 0,0:05:41.68,0:05:42.58,Default,,0,0,0,,Kamu sangat jahat! 
+Dialogue: 0,0:05:43.99,0:05:45.82,Default,,0,0,0,,Jadi itu sebabnya kau melepas kaca matamu... 
+Dialogue: 0,0:05:45.89,0:05:47.19,Default,,0,0,0,,Huh... Tolong satu mangkuk lagi! 
+Dialogue: 0,0:05:49.83,0:05:52.26,Default,,0,0,0,,Kami sekarang akan memulai tes kelulusan. 
+Dialogue: 0,0:05:53.13,0:05:55.82,Default,,0,0,0,,Ketika nama Anda dipanggil, lanjutkan ke kelas berikutnya. 
+Dialogue: 0,0:05:56.60,0:05:58.97,Default,,0,0,0,,Tesnya ada di Jutsu Klon. 
+Dialogue: 0,0:05:59.74,0:06:00.67,Default,,0,0,0,,{\i1}Oh tidak...{\i0} 
+Dialogue: 0,0:06:01.10,0:06:04.87,Default,,0,0,0,,{\i1}Dari semua...! Itu Jutsu terlemahku!{\i0} 
+Dialogue: 0,0:06:09.21,0:06:12.27,Default,,0,0,0,,{\i1}Tapi tetap saja...{\i0} {\i1}Aku akan melakukannya bagaimanapun caranya!{\i0} 
+Dialogue: 0,0:06:17.65,0:06:18.95,Default,,0,0,0,,Jutsu Kloning! 
+Dialogue: 0,0:06:28.13,0:06:29.50,Default,,0,0,0,,Didiskualifikasi! 
+Dialogue: 0,0:06:31.83,0:06:32.82,Default,,0,0,0,,Sensei Iruka.
+Dialogue: 0,0:06:34.27,0:06:37.73,Default,,0,0,0,,Koordinasi fisik dan staminanya sangat baik. 
+Dialogue: 0,0:06:38.14,0:06:41.37,Default,,0,0,0,,Dan dia berhasil menemukan sesuatu. 
+Dialogue: 0,0:06:41.94,0:06:43.84,Default,,0,0,0,,Apakah itu tidak cukup baginya untuk lulus? 
+Dialogue: 0,0:06:44.48,0:06:49.61,Default,,0,0,0,,Sensei Mizuki... Yang lainnya menciptakan tiga klon atau lebih. 
+Dialogue: 0,0:06:51.02,0:06:52.85,Default,,0,0,0,,Naruto menciptakan hanya satu. 
+Dialogue: 0,0:06:53.56,0:06:57.79,Default,,0,0,0,,Dan itu praktis tidak berguna. Saya tidak bisa memberinya nilai kelulusan. 
+Dialogue: 0,0:07:06.84,0:07:08.10,Default,,0,0,0,,Saya seorang Ninja sekarang! 
+Dialogue: 0,0:07:08.57,0:07:10.37,Default,,0,0,0,,Anda melakukannya dengan baik. Itu anakku. 
+Dialogue: 0,0:07:10.87,0:07:12.50,Default,,0,0,0,,Selamat atas kelulusanmu. 
+Dialogue: 0,0:07:12.57,0:07:14.34,Default,,0,0,0,,Aku akan memasak sesuatu yang enak malam ini! 
+Dialogue: 0,0:07:15.64,0:07:17.31,Default,,0,0,0,,Lihat yang itu. 
+Dialogue: 0,0:07:18.15,0:07:21.84,Default,,0,0,0,,Anak laki-laki itu. Kudengar dia satu-satunya yang gagal. 
+Dialogue: 0,0:07:23.15,0:07:24.31,Default,,0,0,0,,Melayani dia dengan benar. 
+Dialogue: 0,0:07:24.55,0:07:27.08,Default,,0,0,0,,Bayangkan apa yang akan terjadi jika dia menjadi seorang Ninja. 
+Dialogue: 0,0:07:27.46,0:07:28.68,Default,,0,0,0,,Bukankah itu laki-laki yang sebenarnya... 
+Dialogue: 0,0:07:28.76,0:07:31.28,Default,,0,0,0,,Hei! Kita tidak seharusnya membicarakan itu. 
+Dialogue: 0,0:07:39.30,0:07:44.07,Default,,0,0,0,,Iruka. Kita perlu bicara nanti.
+Dialogue: 0,0:07:44.94,0:07:45.46,Default,,0,0,0,,Ya pak. 
+Dialogue: 0,0:07:51.58,0:07:55.41,Default,,0,0,0,,Iruka Sensei tidak bermaksud jahat padamu. 
+Dialogue: 0,0:07:55.88,0:07:58.44,Default,,0,0,0,,Lalu kenapa hanya aku? 
+Dialogue: 0,0:07:58.99,0:08:04.69,Default,,0,0,0,,Dia ingin Anda menjadi kuat dari lubuk hatinya. 
+Dialogue: 0,0:08:05.73,0:08:07.22,Default,,0,0,0,,Kalian berdua tidak punya orang tua. 
+Dialogue: 0,0:08:09.06,0:08:12.86,Default,,0,0,0,,Tapi aku benar-benar ingin lulus. 
+Dialogue: 0,0:08:13.64,0:08:17.07,Default,,0,0,0,,Heh... Kurasa aku tidak punya pilihan... 
+Dialogue: 0,0:08:19.48,0:08:22.44,Default,,0,0,0,,Aku akan memberitahumu sebuah rahasia besar. 
+Dialogue: 0,0:08:24.28,0:08:25.14,Default,,0,0,0,,{\i1}Rahasia?{\i0} 
+Dialogue: 0,0:08:29.05,0:08:30.11,Default,,0,0,0,,Iruka. 
+Dialogue: 0,0:08:31.19,0:08:33.18,Default,,0,0,0,,Ada apa, Tuan Hokage? 
+Dialogue: 0,0:08:33.82,0:08:37.52,Default,,0,0,0,,Saya tahu apa yang kau rasakan. Tapi... 
+Dialogue: 0,0:08:37.73,0:08:42.39,Default,,0,0,0,,Naruto juga tumbuh tanpa mengetahui kasih sayang orang tuanya... seperti kamu. 
+Dialogue: 0,0:08:49.77,0:08:50.60,Default,,0,0,0,,Biarkan aku pergi! 
+Dialogue: 0,0:08:50.71,0:08:53.23,Default,,0,0,0,,Ibu dan ayahku masih di luar sana berkelahi! 
+Dialogue: 0,0:08:56.68,0:08:58.44,Default,,0,0,0,,Bangun, Iruka Sensei! 
+Dialogue: 0,0:09:00.92,0:09:02.14,Default,,0,0,0,,Apa masalahnya? 
+Dialogue: 0,0:09:02.58,0:09:04.81,Default,,0,0,0,,Segera datang ke Lord Hokage! 
+Dialogue: 0,0:09:05.49,0:09:09.51,Default,,0,0,0,,Kudengar Naruto... mencuri Scroll of Sealing.
+Dialogue: 0,0:09:10.99,0:09:12.22,Default,,0,0,0,,Gulungan Penyegelan?! 
+Dialogue: 0,0:09:14.36,0:09:15.49,Default,,0,0,0,,Mari kita lihat... 
+Dialogue: 0,0:09:15.76,0:09:20.39,Default,,0,0,0,,Jutsu yang pertama adalah... Jutsu Multi Shadow Clone? 
+Dialogue: 0,0:09:21.34,0:09:24.36,Default,,0,0,0,,Apa?! Sudah menjadi Jutsu yang tidak saya kuasai? 
+Dialogue: 0,0:09:25.07,0:09:27.56,Default,,0,0,0,,Tuan Hokage! Kita tidak bisa memaafkannya! 
+Dialogue: 0,0:09:27.64,0:09:28.70,Default,,0,0,0,,Ini bukan hanya lelucon! 
+Dialogue: 0,0:09:28.78,0:09:32.65,Default,,0,0,0,,Gulungan itu adalah barang berbahaya yang disegel oleh Hokage Pertama! 
+Dialogue: 0,0:09:33.15,0:09:34.58,Default,,0,0,0,,Tergantung penggunaannya... 
+Dialogue: 0,0:09:35.38,0:09:38.72,Default,,0,0,0,,Ini akan menjadi bencana besar jika dibawa keluar dari desa! 
+Dialogue: 0,0:09:40.56,0:09:43.12,Default,,0,0,0,,Ya. Bawa Naruto ke sini segera! 
+Dialogue: 0,0:09:43.49,0:09:44.12,Default,,0,0,0,,Ya pak! 
+Dialogue: 0,0:09:54.87,0:09:56.24,Default,,0,0,0,,{\i1}Kemana kamu pergi...Naruto?{\i0} { 
+Dialogue: 0,0:10:04.91,0:10:08.47,Default,,0,0,0,,\i1}Aku akan memberitahu semua orang di desa{\i0} {\i1}tentang ini dan melenyapkan Naruto...{\i0} 
+Dialogue: 0,0:10:09.22,0:10:12.05,Default,,0,0,0,,{\ i1}Kemudian Gulungan Penyegelan{\i0} {\i1}akan menjadi milikku!{\i0} 
+Dialogue: 0,0:10:23.94,0:10:26.37,Default,,0,0,0,,Hei, Naruto! 
+Dialogue: 0,0:10:32.14,0:10:33.94,Default,,0,0,0,,Anda menemukan saya... 
+Dialogue: 0,0:10:34.18,0:10:36.91,Default,,0,0,0,,Dan saya hanya belajar satu Jutsu.
+Dialogue: 0,0:10:38.15,0:10:40.21,Default,,0,0,0,,{\i1}Dia telah berlatih Jutsu...{\i0} 
+Dialogue: 0,0:10:40.79,0:10:42.48,Default,,0,0,0,,{\i1}sampai dia menjadi{\i0} {\i1}selelah dan sekotor ini...?{\i0} 
+Dialogue: 0,0:10:42.62,0:10:45.82,Default,,0,0,0,,Dengar, dengar! Saya akan menunjukkan kepada Anda Jutsu yang luar biasa ini! 
+Dialogue: 0,0:10:46.06,0:10:47.99,Default,,0,0,0,,Anda akan membiarkan saya lulus jika saya bisa melakukannya! 
+Dialogue: 0,0:10:48.23,0:10:51.75,Default,,0,0,0,,Bukankah saya bisa lulus jika saya bisa melakukan salah satu Jutsu yang tertulis di sini? 
+Dialogue: 0,0:10:52.80,0:10:53.99,Default,,0,0,0,,Siapa yang memberitahumu itu? 
+Dialogue: 0,0:10:54.37,0:10:59.96,Default,,0,0,0,,Sensei Mizuki. Dia memberitahuku tentang gulungan ini, dan tempat ini... 
+Dialogue: 0,0:11:03.41,0:11:04.27,Default,,0,0,0,,Mizuki melakukannya?! 
+Dialogue: 0,0:11:09.82,0:11:11.31,Default,,0,0,0,,Saya terkesan Anda menemukan tempat ini. 
+Dialogue: 0,0:11:12.62,0:11:15.11,Default,,0,0,0,,Saya melihat sekarang ... bagaimana itu. 
+Dialogue: 0,0:11:18.29,0:11:21.59,Default,,0,0,0,,Naruto, beri aku gulungan itu. 
+Dialogue: 0,0:11:22.13,0:11:25.26,Default,,0,0,0,,Tunggu, tunggu... Apa yang terjadi disini? 
+Dialogue: 0,0:11:27.73,0:11:30.26,Default,,0,0,0,,Naruto! Jangan pernah memberinya gulungan itu! 
+Dialogue: 0,0:11:30.97,0:11:35.24,Default,,0,0,0,,Itu adalah benda berbahaya yang mengandung Jutsu Ninja terlarang. Itu disegel. 
+Dialogue: 0,0:11:35.78,0:11:39.04,Default,,0,0,0,,Mizuki memanfaatkanmu untuk mendapatkannya sendiri!
+Dialogue: 0,0:11:39.71,0:11:40.47,Default,,0,0,0,,Apa? 
+Dialogue: 0,0:11:41.08,0:11:45.95,Default,,0,0,0,,Naruto, Iruka hanya takut padamu memegang gulungan itu! 
+Dialogue: 0,0:11:46.35,0:11:46.91,Default,,0,0,0,,Hah? 
+Dialogue: 0,0:11:49.32,0:11:52.69,Default,,0,0,0,,Apa yang kamu katakan, Mizuki! Jangan biarkan dia membodohimu, Naruto! 
+Dialogue: 0,0:11:54.36,0:11:56.23,Default,,0,0,0,,Saya akan mengatakan yang sebenarnya. 
+Dialogue: 0,0:11:56.46,0:11:57.55,Default,,0,0,0,,Bodoh! Jangan lakukan itu! 
+Dialogue: 0,0:11:58.40,0:12:02.33,Default,,0,0,0,,Setelah kejadian 12 tahun lalu, sebuah aturan dibuat. 
+Dialogue: 0,0:12:04.00,0:12:05.23,Default,,0,0,0,,Aturan? 
+Dialogue: 0,0:12:06.11,0:12:11.34,Default,,0,0,0,,Yaitu, Naruto, aturan semua orang kecuali Anda tahu. 
+Dialogue: 0,0:12:11.94,0:12:15.47,Default,,0,0,0,,Kecuali saya?! Apa itu? 
+Dialogue: 0,0:12:16.15,0:12:17.38,Default,,0,0,0,,Hentikan, Mizuki! 
+Dialogue: 0,0:12:17.98,0:12:21.98,Default,,0,0,0,,Aturan melarang siapa pun mengungkapkan bahwa Anda sebenarnya adalah Roh Rubah Iblis! 
+Dialogue: 0,0:12:22.92,0:12:23.35,Default,,0,0,0,,Hah? 
+Dialogue: 0,0:12:24.49,0:12:28.09,Default,,0,0,0,,Anda sebenarnya adalah Iblis, Roh Rubah Berekor Sembilan, 
+Dialogue: 0,0:12:28.16,0:12:31.15,Default,,0,0,0,,yang membunuh orang tua Iruka dan menghancurkan desa kami! 
+Dialogue: 0,0:12:31.53,0:12:32.50,Default,,0,0,0,,Hentikan! 
+Dialogue: 0,0:12:34.00,0:12:37.13,Default,,0,0,0,,Semua orang telah menipu Anda sejak saat itu. 
+Dialogue: 0,0:12:38.30,0:12:40.36,Default,,0,0,0,,Apakah Anda tidak merasa aneh?
+Dialogue: 0,0:12:41.14,0:12:43.07,Default,,0,0,0,,Mengapa semua orang sangat membencimu? 
+Dialogue: 0,0:12:43.78,0:12:48.11,Default,,0,0,0,,TIDAK! TIDAK! TIDAK! TIDAK! TIDAK! 
+Dialogue: 0,0:12:48.98,0:12:50.07,Default,,0,0,0,,Naruto... 
+Dialogue: 0,0:12:50.58,0:12:55.61,Default,,0,0,0,,Tidak ada yang menerimamu. Itu sebabnya Iruka sangat membencimu! 
+Dialogue: 0,0:12:57.46,0:13:01.98,Default,,0,0,0,,{\i1}Iruka... Naruto tumbuh{\i0} {\i1}tanpa kasih sayang orang tua.{\i0} { 
+Dialogue: 0,0:13:02.56,0:13:06.73,Default,,0,0,0,,\i1}Semua orang menghindarinya seperti{\i0} {\i1}wabah setelah apa yang terjadi .{\i0} 
+Dialogue: 0,0:13:07.37,0:13:12.43,Default,,0,0,0,,{\i1}Itulah sebabnya dia terus berperilaku buruk.{\i0} { 
+Dialogue: 0,0:13:13.11,0:13:18.34,Default,,0,0,0,,\i1}Itulah satu-satunya cara baginya untuk mendapatkan{\i0} {\i1}perhatian atau pengakuan.{\i0} { 
+Dialogue: 0,0:13:18.88,0:13:22.87,Default,,0,0,0,,\ i1}Dia berpura-pura tegar,{\i0} {\i1}tapi di dalam hatinya dia benar-benar terluka.{\i0} 
+Dialogue: 0,0:13:23.55,0:13:25.07,Default,,0,0,0,,Matilah, Naruto! 
+Dialogue: 0,0:13:27.82,0:13:29.15,Default,,0,0,0,,Naruto! Turun! 
+Dialogue: 0,0:13:42.37,0:13:44.50,Default,,0,0,0,,Mengapa...? 
+Dialogue: 0,0:13:46.47,0:13:48.06,Default,,0,0,0,,Karena kau dan aku adalah sama. 
+Dialogue: 0,0:13:49.21,0:13:50.97,Default,,0,0,0,,Setelah orang tua saya meninggal, 
+Dialogue: 0,0:13:51.31,0:13:55.84,Default,,0,0,0,,tidak ada yang memperhatikan saya atau memberi saya dukungan. 
+Dialogue: 0,0:13:57.48,0:13:59.21,Default,,0,0,0,,Saya bukan siswa yang baik di sekolah.
+Dialogue: 0,0:13:59.29,0:14:04.99,Default,,0,0,0,,Saya adalah badut kelas... karena saya ingin orang memperhatikan saya. 
+Dialogue: 0,0:14:05.76,0:14:11.59,Default,,0,0,0,,Saya tidak bisa diperhatikan melalui keunggulan, jadi saya terus melakukan hal-hal bodoh. 
+Dialogue: 0,0:14:15.13,0:14:16.19,Default,,0,0,0,,Itu sangat sulit. 
+Dialogue: 0,0:14:18.64,0:14:20.63,Default,,0,0,0,,Bukan begitu, Naruto? 
+Dialogue: 0,0:14:21.74,0:14:26.58,Default,,0,0,0,,Anda merasa sangat kesepian ... kan? Dan Anda menderita di dalam, bukan? 
+Dialogue: 0,0:14:27.95,0:14:29.64,Default,,0,0,0,,Maafkan aku, Naruto... 
+Dialogue: 0,0:14:30.55,0:14:35.82,Default,,0,0,0,,Jika aku lebih bertanggung jawab, mungkin kamu tidak akan terlalu menderita. 
+Dialogue: 0,0:14:39.22,0:14:40.69,Default,,0,0,0,,Jangan membuatku tertawa! 
+Dialogue: 0,0:14:40.99,0:14:45.26,Default,,0,0,0,,Iruka selalu membencimu, sejak kau membunuh orang tuanya! 
+Dialogue: 0,0:14:46.13,0:14:49.79,Default,,0,0,0,,Dia hanya mengatakan semua itu untuk mendapatkan Gulungan Penyegelan kembali! 
+Dialogue: 0,0:14:53.37,0:14:54.13,Default,,0,0,0,,Naruto! 
+Dialogue: 0,0:14:56.04,0:14:57.84,Default,,0,0,0,,Narutooooo! 
+Dialogue: 0,0:15:00.45,0:15:03.38,Default,,0,0,0,,Dia bukan tipe anak yang akan berubah pikiran. 
+Dialogue: 0,0:15:04.45,0:15:07.68,Default,,0,0,0,,Dia akan membalas dendam terhadap desa kami menggunakan gulungan itu! 
+Dialogue: 0,0:15:09.15,0:15:12.99,Default,,0,0,0,,Apa kau tidak melihat matanya? Itu adalah mata dari Demon Fox.
+Dialogue: 0,0:15:16.20,0:15:21.29,Default,,0,0,0,,Tidak... Naruto... sama sekali tidak... seperti itu! 
+Dialogue: 0,0:15:24.17,0:15:27.83,Default,,0,0,0,,Yang saya inginkan hanyalah membunuh Naruto dan mendapatkan gulungan itu. 
+Dialogue: 0,0:15:28.71,0:15:30.20,Default,,0,0,0,,Aku akan menjagamu nanti! 
+Dialogue: 0,0:15:30.68,0:15:32.34,Default,,0,0,0,,Aku tidak akan membiarkanmu... 
+Dialogue: 0,0:15:36.12,0:15:37.34,Default,,0,0,0,,Baiklah. 
+Dialogue: 0,0:15:37.85,0:15:39.88,Default,,0,0,0,,Mizuki memiliki mulut yang besar! 
+Dialogue: 0,0:15:40.42,0:15:43.29,Default,,0,0,0,,Naruto merasa lebih buruk dari yang pernah dia rasakan. 
+Dialogue: 0,0:15:43.72,0:15:47.06,Default,,0,0,0,,Dia mungkin melepaskan kekuatan yang terkunci di dalam dirinya. 
+Dialogue: 0,0:15:47.69,0:15:52.06,Default,,0,0,0,,Gulungan Penyegelan sekarang bersamanya. 
+Dialogue: 0,0:15:52.56,0:15:56.33,Default,,0,0,0,,Ada sedikit kemungkinan dia benar-benar melepaskan 
+Dialogue: 0,0:15:56.40,0:15:59.67,Default,,0,0,0,,Roh Rubah Berekor Sembilan yang tersegel di dalam dirinya! 
+Dialogue: 0,0:16:00.74,0:16:01.97,Default,,0,0,0,,Jika itu terjadi... 
+Dialogue: 0,0:16:04.58,0:16:05.44,Default,,0,0,0,,{\i1}Aku telah menemukannya!{\i0} 
+Dialogue: 0,0:16:07.51,0:16:08.34,Default,,0,0,0,,Naruto! 
+Dialogue: 0,0:16:08.68,0:16:10.48,Default,,0,0,0,,Semua yang dikatakan Mizuki bohong! 
+Dialogue: 0,0:16:10.75,0:16:14.65,Default,,0,0,0,,Beri aku gulungan itu, cepat! Mizuki mengincar gulungan itu! 
+Dialogue: 0,0:16:30.44,0:16:31.99,Default,,0,0,0,,Tidak mungkin... 
+Dialogue: 0,0:16:37.84,0:16:40.24,Default,,0,0,0,,Kenapa, Naruto? 
+Dialogue: 0,0:16:42.15,0:16:43.14,Default,,0,0,0,,Bagaimana...
+Dialogue: 0,0:16:43.22,0:16:46.74,Default,,0,0,0,,apakah kamu tahu aku bukan Iruka...? 
+Dialogue: 0,0:16:50.76,0:16:52.69,Default,,0,0,0,,Karena aku Iruka. 
+Dialogue: 0,0:16:54.36,0:16:55.55,Default,,0,0,0,,Jadi begitu. 
+Dialogue: 0,0:16:58.16,0:17:01.43,Default,,0,0,0,,Apa untungnya bagimu untuk melindungi orang yang membunuh keluargamu? 
+Dialogue: 0,0:17:01.87,0:17:05.20,Default,,0,0,0,,Aku tidak akan membiarkan idiot bodoh sepertimu mendapatkan gulungan itu! 
+Dialogue: 0,0:17:05.84,0:17:09.83,Default,,0,0,0,,Kau idiot. Naruto sama sepertiku. 
+Dialogue: 0,0:17:11.24,0:17:12.11,Default,,0,0,0,,Sama? 
+Dialogue: 0,0:17:12.64,0:17:16.31,Default,,0,0,0,,Siapa pun dapat melakukan apa pun yang dia inginkan begitu dia memiliki gulungan itu. 
+Dialogue: 0,0:17:16.52,0:17:18.48,Default,,0,0,0,,Tidak mungkin monster itu... 
+Dialogue: 0,0:17:18.55,0:17:22.08,Default,,0,0,0,,Roh Rubah itu, tidak akan memanfaatkan kekuatan gulungan itu! 
+Dialogue: 0,0:17:23.06,0:17:24.18,Default,,0,0,0,,Kamu benar... 
+Dialogue: 0,0:17:27.73,0:17:29.49,Default,,0,0,0,,{\i1}Kurasa selama ini memang benar!{\i0} 
+Dialogue: 0,0:17:30.36,0:17:36.30,Default,,0,0,0,,{\i1}Lihat, Iruka Sensei tidak pernah benar-benar{\i0} {\i1}memperhatikanku sama sekali!{\i0 } 
+Dialogue: 0,0:17:36.80,0:17:38.43,Default,,0,0,0,,...jika dia adalah Demon Fox Spirit. 
+Dialogue: 0,0:17:40.54,0:17:42.27,Default,,0,0,0,,Tapi Naruto berbeda! 
+Dialogue: 0,0:17:42.57,0:17:47.48,Default,,0,0,0,,Saya tahu bahwa dia adalah siswa yang luar biasa. 
+Dialogue: 0,0:17:48.68,0:17:49.84,Default,,0,0,0,,Dia bekerja sangat keras,
+Dialogue: 0,0:17:50.25,0:17:54.12,Default,,0,0,0,,dan dia berpikiran tunggal dan kikuk pada saat yang sama. 
+Dialogue: 0,0:17:54.12,0:18:00.22,Default,,0,0,0,,Tidak ada yang menerimanya, tapi dia tahu arti penderitaan manusia. 
+Dialogue: 0,0:18:00.89,0:18:02.86,Default,,0,0,0,,Dia bukan Roh Rubah Iblis. 
+Dialogue: 0,0:18:02.93,0:18:05.56,Default,,0,0,0,,Dia Uzumaki Naruto dari Desa Tersembunyi di Daun! 
+Dialogue: 0,0:18:10.97,0:18:13.53,Default,,0,0,0,,Anda sangat mudah tertipu. Iruka! 
+Dialogue: 0,0:18:14.21,0:18:17.20,Default,,0,0,0,,Aku akan menjatuhkanmu nanti, tapi aku berubah pikiran. 
+Dialogue: 0,0:18:17.58,0:18:19.04,Default,,0,0,0,,Mati! 
+Dialogue: 0,0:18:21.01,0:18:22.24,Default,,0,0,0,,{\i1}Kurasa ini adalah akhir bagiku...{\i0} 
+Dialogue: 0,0:18:29.92,0:18:30.72,Default,,0,0,0,,{\i1}Naruto?!{\i0} 
+Dialogue: 0,0:18:33.59,0:18:35.42,Default,,0,0,0,,Kau mengejutkanku di sana, aneh. 
+Dialogue: 0,0:18:36.70,0:18:41.13,Default,,0,0,0,,Jika kau menyentuh Iruka Sensei, aku akan membunuhmu! 
+Dialogue: 0,0:18:41.87,0:18:46.24,Default,,0,0,0,,Diam! Aku bisa mengurus anak sepertimu dengan satu pukulan! 
+Dialogue: 0,0:18:46.84,0:18:51.14,Default,,0,0,0,,Mengapa Anda tidak mencobanya? Aku akan menyerangmu kembali seribu kali lipat! 
+Dialogue: 0,0:18:51.51,0:18:55.17,Default,,0,0,0,,Mari kita lihat Anda mencoba! Tunjukkan padaku apa yang bisa kamu lakukan, Demon Fox! 
+Dialogue: 0,0:18:56.45,0:18:58.08,Default,,0,0,0,,Jutsu Klon Bayangan!
+Dialogue: 0,0:19:07.33,0:19:09.02,Default,,0,0,0,,{\i1}Naruto! Kamu telah...{\i0} 
+Dialogue: 0,0:19:09.80,0:19:15.73,Default,,0,0,0,,{\i1}Itu bukan hanya gambar tapi klon sebenarnya!{\i0} {\i1}Itu adalah Ninjutsu tingkat lanjut!{\i0} 
+Dialogue: 0,0:19:17.84,0:19:18.63,Default,,0,0,0,,Apa ini...? 
+Dialogue: 0,0:19:19.10,0:19:21.60,Default,,0,0,0,,Apa masalahnya? Ayo! 
+Dialogue: 0,0:19:21.67,0:19:25.34,Default,,0,0,0,,Apakah Anda tidak akan mendapatkan saya dengan satu pukulan? Di Sini! 
+Dialogue: 0,0:19:25.61,0:19:28.08,Default,,0,0,0,,Kalau begitu... Aku akan mendatangimu. 
+Dialogue: 0,0:19:44.33,0:19:48.82,Default,,0,0,0,,Saya agak terbawa suasana. Iruka Sensei, kamu baik-baik saja? 
+Dialogue: 0,0:19:49.77,0:19:50.53,Default,,0,0,0,,Ya. 
+Dialogue: 0,0:19:52.20,0:19:53.69,Default,,0,0,0,,{\i1}Dia benar-benar sesuatu.{\i0} 
+Dialogue: 0,0:19:54.31,0:19:55.93,Default,,0,0,0,,{\i1}Mungkin itu benar.{\i0} 
+Dialogue: 0,0:19:56.01,0:19:58.03,Default,,0,0,0,,{\i1}Mungkin dia akan melampaui semua{\i0} {\i1}pemimpin Hokage...{\ i0} 
+Dialogue: 0,0:20:01.05,0:20:05.42,Default,,0,0,0,,Naruto, kemarilah. Saya ingin memberi Anda sesuatu. 
+Dialogue: 0,0:20:08.75,0:20:10.85,Default,,0,0,0,,Ada yang udah ketemu naruto? 
+Dialogue: 0,0:20:11.22,0:20:11.88,Default,,0,0,0,,Tidak. 
+Dialogue: 0,0:20:12.39,0:20:15.05,Default,,0,0,0,,Sial, ini akan menjadi buruk... 
+Dialogue: 0,0:20:16.06,0:20:18.26,Default,,0,0,0,,Tidak perlu khawatir lagi. 
+Dialogue: 0,0:20:19.53,0:20:20.59,Default,,0,0,0,,Tuan Hokage! 
+Dialogue: 0,0:20:21.67,0:20:24.23,Default,,0,0,0,,Dia akan segera kembali.
+Dialogue: 0,0:20:25.74,0:20:27.76,Default,,0,0,0,,Sensei, berapa lama lagi? 
+Dialogue: 0,0:20:28.24,0:20:30.44,Default,,0,0,0,,OK, Anda dapat membuka mata Anda sekarang. 
+Dialogue: 0,0:20:42.05,0:20:44.78,Default,,0,0,0,,Selamat... atas kelulusanmu. 
+Dialogue: 0,0:20:50.20,0:20:54.53,Default,,0,0,0,,Sebagai perayaan, kita akan makan ramen malam ini! 
+Dialogue: 0,0:21:01.71,0:21:03.14,Default,,0,0,0,,Sensei Iruka! 
+Dialogue: 0,0:21:03.58,0:21:04.74,Default,,0,0,0,,Itu menyakitkan! 
+Dialogue: 0,0:21:05.84,0:21:06.90,Default,,0,0,0,,{\i1}Naruto...{\i0} 
+Dialogue: 0,0:21:07.48,0:21:09.71,Default,,0,0,0,,{\i1}Aku akan menceramahimu...{\i0} 
+Dialogue: 0,0:21:09.78,0:21:13.31,Default,,0,0,0,,{\i1}bahwa jalannya semakin sulit{\i0} {\i1}sekarang kamu seorang Ninja.{\i0} 
+Dialogue: 0,0:21:13.82,0:21:18.09,Default,,0,0,0,,{\i1}Tapi kurasa aku akan menunggu untuk memberitahumu{\i0} {\i1}bahwa sampai kita tiba di kedai ramen...{\i0}
