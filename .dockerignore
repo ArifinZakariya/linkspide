@@ -1,0 +1,15 @@
+node_modules
+.tmp
+.git
+.github
+puppeteer-service
+python-service
+video-service
+*.log
+.gitignore
+opencode.json
+.nvmrc
+fly.toml
+Dockerfile
+.dockerignore
+README.md
