@@ -3,7 +3,9 @@ FROM node:20-slim
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev
-COPY . .
+COPY src/ ./src/
+COPY public/ ./public/
+COPY logos.png ./
 
-EXPOSE 8080
+EXPOSE 5000
 CMD ["npm", "start"]
