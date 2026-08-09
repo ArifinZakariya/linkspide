@@ -91,8 +91,9 @@ body{min-height:100vh;overflow-x:hidden;position:relative}
    ============================================================ */
 .input-card{margin-bottom:1rem;position:relative}
 .input-card-primary .input-wrapper{padding:.5rem;border-radius:var(--radius);box-shadow:var(--shadow-sm)}
-.input-wrapper{display:flex;gap:.5rem;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.45rem;transition:border-color .2s,box-shadow .2s;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);position:relative}
+.input-wrapper{display:flex;gap:.5rem;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.45rem;transition:border-color .2s,box-shadow .2s;position:relative}
 .input-wrapper:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.input-card-primary .input-wrapper{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .input-icon{display:flex;align-items:center;padding:0 .5rem;color:var(--text-3);flex-shrink:0}
 input[type="url"],input[type="text"]{flex:1;min-width:0;background:none;border:none;color:var(--text);font-size:.96rem;outline:none;padding:.6rem .2rem;font-family:inherit}
 input[type="url"]::placeholder,input[type="text"]::placeholder{color:var(--text-3)}
