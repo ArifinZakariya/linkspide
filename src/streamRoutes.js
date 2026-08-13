@@ -1,6 +1,7 @@
 const express = require("express");
 const https = require("https");
 const http = require("http");
+const { spawn } = require("child_process");
 const { pipeline } = require("stream/promises");
 const { PassThrough, Readable, Transform } = require("stream");
 const { existsSync, mkdirSync, statSync, createReadStream, createWriteStream, readFileSync, writeFileSync, unlinkSync } = require("fs");
@@ -97,6 +98,7 @@ function resolveDownloadUrl(url) {
 function serviceId(url) {
   const pd = getPixeldrainId(url); if (pd) return `pd_${pd}`;
   const gd = getGoogleDriveId(url); if (gd) return `gd_${gd}`;
+  const mf = getMediaFireId(url); if (mf) return `mf_${mf}`;
   if (isMegaUrl(url)) return `mega_${Buffer.from(url).toString("base64url").slice(0, 40)}`;
   if (isDirectUrl(url)) return `direct_${Buffer.from(url).toString("base64url").slice(0, 40)}`;
   return `raw_${Buffer.from(url).toString("base64url").slice(0, 40)}`;
@@ -158,17 +160,14 @@ async function handleBuzzHeavierStream(url, req) {
   if (range) fetchHeaders["Range"] = range;
   const upstreamRes = await fetch(info.downloadUrl, { headers: fetchHeaders, redirect: "follow" });
   if (!upstreamRes.ok && upstreamRes.status !== 206) throw new Error("Upstream returned " + upstreamRes.status);
-  const respHeaders = new Headers();
-  respHeaders.set("Access-Control-Allow-Origin", "*");
-  respHeaders.set("Accept-Ranges", "bytes");
-  respHeaders.set("Cache-Control", "public, max-age=3600");
+  const respHeaders = { "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600" };
   let ctHeader = upstreamRes.headers.get("content-type") || contentType;
   if (ctHeader.includes("x-matroska") || ctHeader.includes("mkv")) ctHeader = "video/mp4";
-  respHeaders.set("Content-Type", ctHeader);
+  respHeaders["Content-Type"] = ctHeader;
   const cl = upstreamRes.headers.get("content-length");
-  if (cl) respHeaders.set("Content-Length", cl);
+  if (cl) respHeaders["Content-Length"] = cl;
   const cr = upstreamRes.headers.get("content-range");
-  if (cr) respHeaders.set("Content-Range", cr);
+  if (cr) respHeaders["Content-Range"] = cr;
   let status = upstreamRes.status;
   if (range && upstreamRes.status === 206) status = 206;
   return { status, headers: respHeaders, body: toReadable(upstreamRes.body) };
@@ -230,10 +229,93 @@ async function getSendNowDirectUrl(url) {
   } catch { return url; }
 }
 
+const mediaFireCache = new Map();
+const MEDIA_FIRE_CACHE_TTL = 30 * 60 * 1000;
+function getMediaFireCached(url) { const e = mediaFireCache.get(url); if (e && Date.now() - e.ts < MEDIA_FIRE_CACHE_TTL) return e.data; mediaFireCache.delete(url); return null; }
+function setMediaFireCached(url, data) { if (mediaFireCache.size > 200) { const k = mediaFireCache.keys().next().value; mediaFireCache.delete(k); } mediaFireCache.set(url, { data, ts: Date.now() }); }
+
+function isMediaFireUrl(url) {
+  try { const p = new URL(url); return p.hostname === "mediafire.com" || p.hostname.endsWith(".mediafire.com"); } catch { return false; }
+}
+
+function getMediaFireId(url) {
+  try {
+    const p = new URL(url);
+    if (!isMediaFireUrl(url)) return null;
+    const m = p.pathname.match(/\/(?:file|download|view)\/([a-zA-Z0-9]+)/);
+    if (m) return m[1];
+    return null;
+  } catch { return null; }
+}
+
+async function getMediaFireDownloadFromPage(pageUrl) {
+  const res = await fetch(pageUrl, { headers: { ...UPSTREAM_HEADERS, Accept: "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9" }, redirect: "follow", signal: AbortSignal.timeout(15000) });
+  if (!res.ok) return null;
+  const html = await res.text();
+  const m = html.match(/"(https:\/\/download[^"]+)"/);
+  if (m) return m[1].replace(/&amp;/g, "&");
+  const btn = html.match(/id="downloadButton"\s+[^>]*href="([^"]+)"/);
+  if (btn) return btn[1].replace(/&amp;/g, "&");
+  return null;
+}
+
+async function getMediaFireInfo(url) {
+  const cached = getMediaFireCached(url);
+  if (cached) return cached;
+  const id = getMediaFireId(url);
+  if (!id) throw new Error("Could not parse MediaFire file id");
+  const apiRes = await fetch(`https://www.mediafire.com/api/1.5/file/get_info.php?quick_key=${id}&response_format=json`, { headers: { ...UPSTREAM_HEADERS, Accept: "application/json" }, signal: AbortSignal.timeout(15000) });
+  if (!apiRes.ok) throw new Error("MediaFire API error: " + apiRes.status);
+  const data = await apiRes.json();
+  const fi = data?.response?.file_info;
+  if (!fi) throw new Error("MediaFire file not found");
+  const info = { id, name: fi.filename || "video.mp4", size: fi.size || 0, downloadUrl: fi.links?.direct_download || null };
+  if (!info.downloadUrl) {
+    const pageUrl = fi.links?.normal_download || `https://www.mediafire.com/file/${id}/${encodeURIComponent(info.name)}`;
+    info.downloadUrl = await getMediaFireDownloadFromPage(pageUrl);
+  }
+  if (!info.downloadUrl) throw new Error("Could not resolve MediaFire download link");
+  setMediaFireCached(url, info);
+  return info;
+}
+
+async function handleMediaFireStream(url, req, info) {
+  const ext = (info.name || "").split(".").pop().toLowerCase();
+  const contentType = ext === "mkv" ? "video/mp4" : ext === "webm" ? "video/webm" : "video/mp4";
+  const range = req.headers["range"];
+  const fetchHeaders = { ...UPSTREAM_HEADERS, Referer: "https://www.mediafire.com/" };
+  if (range) fetchHeaders["Range"] = range;
+  const upstreamRes = await fetch(info.downloadUrl, { headers: fetchHeaders, redirect: "follow" });
+  if (!upstreamRes.ok && upstreamRes.status !== 206) throw new Error("Upstream returned " + upstreamRes.status);
+  const respHeaders = { "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600" };
+  let ctHeader = upstreamRes.headers.get("content-type") || contentType;
+  if (ctHeader.includes("x-matroska") || ctHeader.includes("mkv")) ctHeader = "video/mp4";
+  respHeaders["Content-Type"] = ctHeader;
+  const cl = upstreamRes.headers.get("content-length");
+  if (cl) respHeaders["Content-Length"] = cl;
+  const cr = upstreamRes.headers.get("content-range");
+  if (cr) respHeaders["Content-Range"] = cr;
+  let status = upstreamRes.status;
+  if (range && upstreamRes.status === 206) status = 206;
+  return { status, headers: respHeaders, body: toReadable(upstreamRes.body) };
+}
+
+async function resolveDownloadUrlAsync(url) {
+  if (isMediaFireUrl(url)) {
+    const info = await getMediaFireInfo(url);
+    return info.downloadUrl || url;
+  }
+  return resolveDownloadUrl(url);
+}
+
 async function resolveFinalUrl(url) {
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error("Invalid URL"); }
   const host = parsed.hostname;
+  if (isMediaFireUrl(url)) {
+    try { const info = await getMediaFireInfo(url); if (info && info.downloadUrl) return info.downloadUrl; } catch {}
+    return url;
+  }
   if (host.includes("pixeldrain.com")) {
     const pathParts = parsed.pathname.split("/");
     const idx = pathParts.indexOf("u");
@@ -289,7 +371,8 @@ router.all("/stream", async (req, res) => {
       }
       const result = await handleMegaStream(targetUrl, req);
       res.set(result.headers);
-      result.body.pipe(res);
+      if (isHead) return res.status(200).end();
+      result.body.pipe(res.status(result.status));
     } catch (e) { return res.status(500).json({ error: "Mega error: " + e.message }); }
     return;
   }
@@ -298,8 +381,23 @@ router.all("/stream", async (req, res) => {
       const result = await handleBuzzHeavierStream(targetUrl, req);
       res.set(result.headers);
       if (isHead) return res.status(200).end();
-      result.body.pipe(res);
+      result.body.pipe(res.status(result.status));
     } catch (e) { return res.status(500).json({ error: "BuzzHeavier error: " + e.message }); }
+    return;
+  }
+  if (isMediaFireUrl(targetUrl)) {
+    try {
+      const info = await getMediaFireInfo(targetUrl);
+      const ext = info.name.split(".").pop().toLowerCase();
+      const contentType = ext === "mkv" ? "video/mp4" : ext === "webm" ? "video/webm" : "video/mp4";
+      if (isHead) {
+        res.set({ "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Content-Type": contentType, "Content-Length": (info.size || 0).toString(), "Cache-Control": "public, max-age=3600" });
+        return res.status(200).end();
+      }
+      const result = await handleMediaFireStream(targetUrl, req, info);
+      res.set(result.headers);
+      result.body.pipe(res.status(result.status));
+    } catch (e) { return res.status(500).json({ error: "MediaFire error: " + e.message }); }
     return;
   }
   let resolved;
@@ -599,7 +697,7 @@ function readCDFromBuffer(buf) {
 
 async function readCDFromUrl(url) {
   try {
-    const dlUrl = resolveDownloadUrl(url);
+    const dlUrl = await resolveDownloadUrlAsync(url);
     const r = await httpsGet(dlUrl, { Range: "bytes=-65536" });
     const buf = r.body;
     if (buf.length < 22) throw new Error("too small");
@@ -689,6 +787,12 @@ async function downloadToTemp(url, id) {
     await pipeline(stream, ws);
     return tp;
   }
+  if (isMediaFireUrl(url)) {
+    const info = await getMediaFireInfo(url);
+    const r = await httpsGet(info.downloadUrl);
+    writeFileSync(tp, r.body);
+    return tp;
+  }
   const r = await httpsGet(url);
   writeFileSync(tp, r.body);
   return tp;
@@ -717,6 +821,10 @@ async function getServiceInfo(url) {
     const file = File.fromURL(url);
     await file.loadAttributes();
     return { name: file.name || "archive.zip", size: file.size || 0, mimeType: "application/zip", type: "mega" };
+  }
+  if (isMediaFireUrl(url)) {
+    const info = await getMediaFireInfo(url);
+    return { name: info.name, size: info.size, mimeType: "application/octet-stream", type: "mediafire" };
   }
   const r = await httpsGet(url, { Range: "bytes=0-0" });
   const cl = parseInt(r.headers["content-length"] || "0", 10);
@@ -779,7 +887,7 @@ function createMegaRangeReadStream(url, startByte, endByte) {
 }
 
 async function createStreamingResponse(url, file, rangeHeader) {
-  const dlUrl = resolveDownloadUrl(url);
+  const dlUrl = await resolveDownloadUrlAsync(url);
   const ds = isMegaUrl(url)
     ? await getDataStartFromMega(url, file.localHeaderOffset)
     : await getDataStartFromUrl(dlUrl, file.localHeaderOffset);
@@ -815,6 +923,71 @@ async function createStreamingResponse(url, file, rangeHeader) {
   return { status: 200, headers: { "Access-Control-Allow-Origin": "*", "Content-Type": contentType, "Content-Length": uncompSize.toString(), "Accept-Ranges": "none" }, body: inflate };
 }
 
+// ===== HEVC → H.264 transcode =====
+function ffmpegBin() { return process.env.FFMPEG_PATH || "ffmpeg"; }
+
+function inflatePrefix(buf) {
+  return new Promise((resolve) => {
+    let acc = Buffer.alloc(0);
+    const inf = createInflateRaw();
+    inf.on("data", d => { acc = Buffer.concat([acc, d]); if (acc.length > 524288) inf.destroy(); });
+    inf.on("end", () => resolve(acc));
+    inf.on("error", () => resolve(acc));
+    inf.on("close", () => resolve(acc));
+    inf.end(buf);
+  });
+}
+
+async function probeArchiveCodec(url, file) {
+  try {
+    const isMega = isMegaUrl(url);
+    const dlUrl = isMega ? null : await resolveDownloadUrlAsync(url);
+    const ds = isMega ? await getDataStartFromMega(url, file.localHeaderOffset) : await getDataStartFromUrl(dlUrl, file.localHeaderOffset);
+    const need = Math.min(file.compSize || 2097152, 1048576);
+    let head;
+    if (isMega) head = await megaPartialDownload(url, ds, need);
+    else { const r = await httpsGet(dlUrl, { Range: `bytes=${ds}-${ds + need - 1}` }); head = r.body; }
+    let plain = head;
+    if (file.compMethod !== 0) plain = await inflatePrefix(head);
+    const t = plain.toString("latin1");
+    if (t.includes("V_MPEGH/ISO/HEVC")) return "hevc";
+    return "other";
+  } catch { return null; }
+}
+
+function startTranscode(tp, res) {
+  const args = [
+    "-hide_banner", "-loglevel", "error",
+    "-fflags", "+genpts",
+    "-i", tp,
+    "-map", "0:v:0",
+    "-map", "0:a:0?",
+    "-c:v", "libx264",
+    "-preset", "veryfast",
+    "-crf", "23",
+    "-pix_fmt", "yuv420p",
+    "-profile:v", "main",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-ac", "2",
+    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+    "-f", "mp4",
+    "pipe:1"
+  ];
+  const proc = spawn(ffmpegBin(), args, { stdio: ["ignore", "pipe", "pipe"] });
+  let errBuf = "";
+  proc.stderr.on("data", d => { const s = d.toString(); errBuf = (errBuf + s).slice(-2000); });
+  proc.stdout.on("error", () => {});
+  res.set({ "Access-Control-Allow-Origin": "*", "Content-Type": "video/mp4", "Accept-Ranges": "none", "Cache-Control": "no-cache, no-store" });
+  res.status(200);
+  proc.stdout.pipe(res);
+  res.on("close", () => { if (!res.writableEnded) proc.kill("SIGKILL"); });
+  proc.on("error", e => { if (!res.headersSent) res.status(500).json({ error: "ffmpeg unavailable: " + e.message }); });
+  proc.on("close", code => {
+    if (code !== 0 && !res.headersSent) res.status(500).json({ error: "Transcode failed: " + (errBuf || ("ffmpeg exited " + code)) });
+  });
+}
+
 const progressMap = new Map();
 
 async function ensureExtracted(url, id, file) {
@@ -840,7 +1013,7 @@ async function ensureExtracted(url, id, file) {
     progressMap.delete(progKey);
     return tp;
   }
-  const dlUrl = resolveDownloadUrl(url);
+  const dlUrl = await resolveDownloadUrlAsync(url);
   const ds = await getDataStartFromUrl(dlUrl, file.localHeaderOffset);
   const compressedPath = tp + ".compressed";
   const mod = dlUrl.startsWith("https") ? https : http;
@@ -901,6 +1074,16 @@ router.get("/archive", async (req, res) => {
       const file = JSON.parse(filePath);
       const tp = tempPath(id, file.path);
       const contentType = ct(file.name || file.path);
+
+      const forceTranscode = req.query.transcode === "1";
+      const needsTranscode = forceTranscode || (await probeArchiveCodec(url, file)) === "hevc";
+      if (needsTranscode) {
+        try {
+          if (!existsSync(tp)) await ensureExtracted(url, id, file);
+          return startTranscode(tp, res);
+        } catch (e) { return res.status(500).json({ error: "Transcode error: " + e.message }); }
+      }
+
       const corsHeaders = { "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Content-Type": contentType, "Cache-Control": "public, max-age=3600" };
 
       if (existsSync(tp)) {
