@@ -318,28 +318,27 @@ async function searchByTitle() {
 }
 
 let allSubResults = [];
-let subPage = 0;
-const SUB_PAGE_SIZE = 20;
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 function renderSubResults(subs, reset = true) {
   const container = el("subResults");
   if (reset) {
     container.innerHTML = "";
     allSubResults = subs;
-    subPage = 0;
   }
   show("subResults");
-  const start = subPage * SUB_PAGE_SIZE;
-  const end = Math.min(start + SUB_PAGE_SIZE, allSubResults.length);
-  const slice = allSubResults.slice(start, end);
-  slice.forEach((sub, i) => {
-    const idx = start + i;
+  allSubResults.forEach((sub, idx) => {
     const btn = document.createElement("button");
     btn.className = "sub-result-chip" + (idx === 0 ? " auto-loaded" : "");
+    const name = sub.fileName || sub.display || "Subtitle";
     btn.innerHTML =
       (sub.flagUrl ? `<img src="${sub.flagUrl}" alt="" class="flag-icon">` : '') +
-      `<span class="sub-lang-name">${sub.display}</span>` +
-      (sub.release ? `<span class="sub-release">${sub.release}</span>` : '') +
+      `<span class="sub-lang-name">${esc(name)}</span>` +
+      `<span class="sub-lang-tag">${esc(sub.display)}</span>` +
+      (sub.release ? `<span class="sub-release">${esc(sub.release)}</span>` : '') +
       `<span class="sub-source">${sub.source}</span>` +
       `<span class="sub-format">${sub.format}</span>` +
       (sub.isHearingImpaired ? '<span class="hi-tag">HI</span>' : '') +
@@ -347,19 +346,9 @@ function renderSubResults(subs, reset = true) {
     btn.onclick = () => loadWyzieSub(sub);
     container.appendChild(btn);
   });
-  const existingBtn = container.querySelector(".load-more-btn");
-  if (existingBtn) existingBtn.remove();
-  if (end < allSubResults.length) {
-    const loadMore = document.createElement("button");
-    loadMore.className = "load-more-btn";
-    loadMore.innerHTML = `Load More <span class="load-more-count">${allSubResults.length - end} remaining</span>`;
-    loadMore.onclick = () => { subPage++; renderSubResults(allSubResults, false); };
-    container.appendChild(loadMore);
-  }
 }
 
-function convertWyzieUrl(url, format) {
-  if (!url) return url;
+function convertWyzieUrl(url, format) {  if (!url) return url;
   const vrfMatch = url.match(/vrf-([a-f0-9]+)/i);
   const fileIdMatch = url.match(/\/file\/(\d+)/);
   if (vrfMatch && fileIdMatch) {

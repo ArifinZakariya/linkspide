@@ -242,7 +242,8 @@ input[type="url"]:focus,input[type="text"]:focus{border-color:transparent}
 .sub-result-chip:hover{background:var(--accent-glow);border-color:var(--accent);color:#c9bfff}
 .sub-result-chip.auto-loaded{border-color:rgba(53,224,161,.5)}
 .flag-icon{width:16px;height:12px;border-radius:2px;flex-shrink:0;object-fit:cover}
-.sub-lang-name{font-weight:600;font-size:.78rem}
+.sub-lang-name{font-weight:600;font-size:.78rem;word-break:break-word;overflow-wrap:anywhere}
+.sub-lang-tag{color:var(--text-2);font-size:.68rem;border:1px solid var(--border);border-radius:3px;padding:0 5px;flex-shrink:0}
 .sub-release{font-size:.68rem;color:var(--text-3);white-space:nowrap}
 .sub-source{color:var(--text-3);font-size:.68rem;margin-left:auto}
 .sub-format{color:var(--accent-2);font-size:.68rem;font-weight:600}
