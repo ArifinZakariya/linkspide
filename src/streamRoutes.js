@@ -162,7 +162,8 @@ async function handleBuzzHeavierStream(url, req) {
   if (!upstreamRes.ok && upstreamRes.status !== 206) throw new Error("Upstream returned " + upstreamRes.status);
   const respHeaders = { "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600" };
   let ctHeader = upstreamRes.headers.get("content-type") || contentType;
-  if (ctHeader.includes("x-matroska") || ctHeader.includes("mkv")) ctHeader = "video/mp4";
+  if (ctHeader.includes("x-matroska") || ctHeader.includes("mkv")) ctHeader = "video/x-matroska";
+  if (ctHeader.includes("webm")) ctHeader = "video/webm";
   respHeaders["Content-Type"] = ctHeader;
   const cl = upstreamRes.headers.get("content-length");
   if (cl) respHeaders["Content-Length"] = cl;
@@ -289,7 +290,8 @@ async function handleMediaFireStream(url, req, info) {
   if (!upstreamRes.ok && upstreamRes.status !== 206) throw new Error("Upstream returned " + upstreamRes.status);
   const respHeaders = { "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600" };
   let ctHeader = upstreamRes.headers.get("content-type") || contentType;
-  if (ctHeader.includes("x-matroska") || ctHeader.includes("mkv")) ctHeader = "video/mp4";
+  if (ctHeader.includes("x-matroska") || ctHeader.includes("mkv")) ctHeader = "video/x-matroska";
+  if (ctHeader.includes("webm")) ctHeader = "video/webm";
   respHeaders["Content-Type"] = ctHeader;
   const cl = upstreamRes.headers.get("content-length");
   if (cl) respHeaders["Content-Length"] = cl;
@@ -418,14 +420,25 @@ router.all("/stream", async (req, res) => {
       }
     } catch (e) { /* fall through to normal path */ }
   }
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const r = await fetch(resolved, { method: isHead ? "HEAD" : "GET", headers: { ...UPSTREAM_HEADERS, ...(req.headers["range"] ? { Range: req.headers["range"] } : {}) }, redirect: "follow", signal: controller.signal });
-    clearTimeout(timeout);
+try {
+    let r = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      try {
+        r = await fetch(resolved, { method: isHead ? "HEAD" : "GET", headers: { ...UPSTREAM_HEADERS, ...(req.headers["range"] ? { Range: req.headers["range"] } : {}) }, redirect: "follow", signal: controller.signal });
+        if (r.status === 403 || r.status === 429) {
+          if (r.body) { try { await r.body.cancel(); } catch (e) {} }
+          clearTimeout(timeout);
+          if (attempt < 2) { await new Promise(x => setTimeout(x, 2000 * (attempt + 1))); continue; }
+        }
+      } finally { clearTimeout(timeout); }
+      break;
+    }
     const headers = { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes" };
     let ct = r.headers.get("content-type") || "video/mp4";
-    if (ct.includes("x-matroska") || ct.includes("mkv")) ct = "video/mp4";
+    if (ct.includes("x-matroska") || ct.includes("mkv")) ct = "video/x-matroska";
+    if (ct.includes("webm")) ct = "video/webm";
     headers["Content-Type"] = ct;
     const cl = r.headers.get("content-length");
     if (cl) headers["Content-Length"] = cl;

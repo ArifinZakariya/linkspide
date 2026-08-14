@@ -224,7 +224,7 @@ function applySubtitleTrack(subUrl) {
   const video = el("streamVideo");
   const existing = video.querySelector("track");
   if (existing) existing.remove();
-  if (!subUrl) { el("subToggleBtn").textContent = "No sub"; return; }
+  if (!subUrl) { el("subToggleBtn").textContent = "CC"; return; }
   const track = document.createElement("track");
   subTrackKey++;
   track.src = subUrl;
@@ -243,7 +243,7 @@ function applySubtitleTrack(subUrl) {
   };
   video.appendChild(track);
   video.textTracks[video.textTracks.length - 1].mode = "showing";
-  el("subToggleBtn").textContent = "Toggle";
+  el("subToggleBtn").textContent = "CC ON";
 }
 
 async function loadSubtitle() {
@@ -259,9 +259,12 @@ async function loadSubtitle() {
 function toggleSubtitles() {
   const video = el("streamVideo");
   if (!video) return;
+  let showing = false;
   for (let i = 0; i < video.textTracks.length; i++) {
     video.textTracks[i].mode = video.textTracks[i].mode === "showing" ? "hidden" : "showing";
+    if (video.textTracks[i].mode === "showing") showing = true;
   }
+  el("subToggleBtn").textContent = showing ? "CC ON" : "CC OFF";
 }
 
 async function searchWyzie(imdbId, lang) {
@@ -434,6 +437,12 @@ function setStreamUrl(url) {
   const video = el("streamVideo");
   video.src = url;
   show("playerWrapper");
+  el("centerOverlay").classList.remove("hidden-overlay");
+  el("playerLoader").classList.remove("hidden-overlay");
+  el("curTime").textContent = "0:00";
+  el("durTime").textContent = "0:00";
+  el("seekBar").value = 0;
+  el("playerControls").classList.add("visible");
   video.onloadedmetadata = () => {
     for (let i = 0; i < video.textTracks.length; i++) {
       video.textTracks[i].mode = "showing";
@@ -623,3 +632,144 @@ el("urlInput").addEventListener("input", async () => {
     hide("detectedBadge");
   }
 });
+
+// ===== Custom Player =====
+function fmtTime(s) {
+  if (!isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ":" + String(sec).padStart(2, "0");
+}
+
+function initCustomPlayer() {
+  const video = el("streamVideo");
+  const box = el("playerBox");
+  const playBtn = el("playBtn");
+  const bigPlayBtn = el("bigPlayBtn");
+  const seekBar = el("seekBar");
+  const curTime = el("curTime");
+  const durTime = el("durTime");
+  const volSlider = el("volSlider");
+  const muteBtn = el("muteBtn");
+  const speedSelect = el("speedSelect");
+  const fsBtn = el("fsBtn");
+  const pipBtn = el("pipBtn");
+  const controls = el("playerControls");
+  const loader = el("playerLoader");
+  const centerOverlay = el("centerOverlay");
+  let hideTimer = null;
+
+  function showControls(force) {
+    controls.classList.add("visible");
+    clearTimeout(hideTimer);
+    if (!video.paused && !force) {
+      hideTimer = setTimeout(() => {
+        controls.classList.remove("visible");
+      }, 2600);
+    }
+  }
+
+  function setCenterOverlay() {
+    centerOverlay.classList.toggle("hidden-overlay", !video.paused && !video.ended);
+  }
+
+  function setPlayIcon() {
+    playBtn.innerHTML = video.paused
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+      : '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+    bigPlayBtn.innerHTML = video.paused
+      ? '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+      : '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  }
+
+  function togglePlay() {
+    if (video.paused || video.ended) { video.play(); centerOverlay.classList.add("hidden-overlay"); }
+    else video.pause();
+  }
+
+  playBtn.addEventListener("click", togglePlay);
+  bigPlayBtn.addEventListener("click", (e) => { e.stopPropagation(); togglePlay(); });
+  centerOverlay.addEventListener("click", () => togglePlay());
+  box.addEventListener("click", (e) => {
+    if (e.target === box || e.target === video) togglePlay();
+  });
+
+  video.addEventListener("play", () => { setPlayIcon(); loader.classList.add("hidden-overlay"); setCenterOverlay(); showControls(); });
+  video.addEventListener("pause", () => { setPlayIcon(); setCenterOverlay(); showControls(true); });
+  video.addEventListener("ended", () => { setPlayIcon(); centerOverlay.classList.remove("hidden-overlay"); showControls(true); });
+
+  video.addEventListener("loadedmetadata", () => {
+    seekBar.max = Math.floor(video.duration || 0);
+    durTime.textContent = fmtTime(video.duration);
+  });
+  video.addEventListener("durationchange", () => {
+    seekBar.max = Math.floor(video.duration || 0);
+    durTime.textContent = fmtTime(video.duration);
+  });
+  video.addEventListener("timeupdate", () => {
+    if (!seekBar.hasAttribute("data-scrub")) seekBar.value = Math.floor(video.currentTime || 0);
+    curTime.textContent = fmtTime(video.currentTime);
+  });
+  seekBar.addEventListener("input", () => { if (video.duration) video.currentTime = Number(seekBar.value); });
+  seekBar.addEventListener("change", () => { seekBar.removeAttribute("data-scrub"); });
+  seekBar.addEventListener("pointerdown", () => seekBar.setAttribute("data-scrub", "1"));
+
+  volSlider.addEventListener("input", () => {
+    video.volume = Number(volSlider.value) / 100;
+    video.muted = Number(volSlider.value) === 0;
+    setMuteIcon();
+  });
+  muteBtn.addEventListener("click", () => {
+    video.muted = !video.muted;
+    if (!video.muted && video.volume === 0) { video.volume = 0.5; volSlider.value = 50; }
+    setMuteIcon();
+  });
+  function setMuteIcon() {
+    muteBtn.innerHTML = video.muted || video.volume === 0
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>'
+      : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>';
+  }
+
+  speedSelect.addEventListener("change", () => { video.playbackRate = Number(speedSelect.value); });
+
+  fsBtn.addEventListener("click", () => {
+    if (!document.fullscreenElement) { box.requestFullscreen().catch(() => {}); }
+    else document.exitFullscreen();
+  });
+  document.addEventListener("fullscreenchange", () => {
+    if (document.fullscreenElement) { controls.classList.add("visible"); setCenterOverlay(); }
+  });
+
+  pipBtn.addEventListener("click", async () => {
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else if (document.pictureInPictureEnabled) await video.requestPictureInPicture();
+    } catch (e) {}
+  });
+
+  box.addEventListener("mousemove", () => showControls());
+  box.addEventListener("mouseleave", () => {
+    if (!video.paused) { controls.classList.remove("visible"); }
+  });
+
+  video.addEventListener("waiting", () => loader.classList.remove("hidden-overlay"));
+  video.addEventListener("playing", () => loader.classList.add("hidden-overlay"));
+  video.addEventListener("canplay", () => loader.classList.add("hidden-overlay"));
+
+  document.addEventListener("keydown", (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+    if (e.code === "ArrowRight") video.currentTime = Math.min(video.duration || 0, video.currentTime + 5);
+    if (e.code === "ArrowLeft") video.currentTime = Math.max(0, video.currentTime - 5);
+    if (e.code === "KeyM") muteBtn.click();
+    if (e.code === "KeyF") fsBtn.click();
+  });
+
+  setPlayIcon();
+  setMuteIcon();
+  showControls(true);
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initCustomPlayer);
+else initCustomPlayer();
