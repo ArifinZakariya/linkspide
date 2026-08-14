@@ -359,6 +359,7 @@ async function proxyRequest(req, targetUrl) {
 router.all("/stream", async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).json({ error: "Missing url parameter" });
+  res.on("finish", () => console.log("[stream] ", req.method, targetUrl.slice(0, 70), "->", res.statusCode));
   const isHead = req.method === "HEAD";
   if (isMegaUrl(targetUrl)) {
     try {
@@ -402,6 +403,21 @@ router.all("/stream", async (req, res) => {
   }
   let resolved;
   try { resolved = await resolveFinalUrl(targetUrl); } catch (e) { return res.status(400).json({ error: e.message }); }
+
+  const mkvish = /\.mkv(?:\?|#|$)/i.test(targetUrl) || /\.mkv(?:\?|#|$)/i.test(resolved) || targetUrl.includes("pixeldrain.com") || resolved.includes("pixeldrain.com");
+  if (mkvish && isHead) {
+    res.set({ "Access-Control-Allow-Origin": "*", "Accept-Ranges": "bytes", "Content-Type": "video/mp4", "Cache-Control": "no-cache, no-store" });
+    return res.status(200).end();
+  }
+  if (mkvish) {
+    try {
+      const codec = await getCachedProbe(resolved);
+      if (codec === "hevc" || codec == null) {
+        console.log("[stream] transcode", req.method, req.query.url.slice(0, 60), "codec=" + codec);
+        return startRemoteTranscode(resolved, res);
+      }
+    } catch (e) { /* fall through to normal path */ }
+  }
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -418,8 +434,10 @@ router.all("/stream", async (req, res) => {
     let status = isHead ? 200 : r.status;
     if (!isHead && req.headers["range"] && r.status === 206) status = 206;
     res.set(headers);
-    if (isHead || !r.body) return res.status(status).end();
-    toReadable(r.body).pipe(res.status(status));
+if (isHead || !r.body) return res.status(status).end();
+      const body = toReadable(r.body);
+      body.on("error", () => {});
+      body.pipe(res.status(status));
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: "Proxy error: " + e.message });
   }
@@ -955,11 +973,11 @@ async function probeArchiveCodec(url, file) {
   } catch { return null; }
 }
 
-function startTranscode(tp, res) {
-  const args = [
+function transcodeArgs(input) {
+  return [
     "-hide_banner", "-loglevel", "error",
     "-fflags", "+genpts",
-    "-i", tp,
+    ...input,
     "-map", "0:v:0",
     "-map", "0:a:0?",
     "-c:v", "libx264",
@@ -974,7 +992,10 @@ function startTranscode(tp, res) {
     "-f", "mp4",
     "pipe:1"
   ];
-  const proc = spawn(ffmpegBin(), args, { stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function startTranscode(tp, res) {
+  const proc = spawn(ffmpegBin(), transcodeArgs(["-i", tp]), { stdio: ["ignore", "pipe", "pipe"] });
   let errBuf = "";
   proc.stderr.on("data", d => { const s = d.toString(); errBuf = (errBuf + s).slice(-2000); });
   proc.stdout.on("error", () => {});
@@ -982,6 +1003,84 @@ function startTranscode(tp, res) {
   res.status(200);
   proc.stdout.pipe(res);
   res.on("close", () => { if (!res.writableEnded) proc.kill("SIGKILL"); });
+  proc.on("error", e => { if (!res.headersSent) res.status(500).json({ error: "ffmpeg unavailable: " + e.message }); });
+  proc.on("close", code => {
+    if (code !== 0 && !res.headersSent) res.status(500).json({ error: "Transcode failed: " + (errBuf || ("ffmpeg exited " + code)) });
+  });
+}
+
+function readHead(url, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const mod = url.startsWith("https") ? https : http;
+    const req = mod.get(url, { headers: { ...UPSTREAM_HEADERS, Range: `bytes=0-${maxBytes - 1}` } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return readHead(res.headers.location, maxBytes).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      let got = 0;
+      res.on("data", (c) => {
+        chunks.push(c); got += c.length;
+        if (!done && got >= maxBytes) { done = true; req.destroy(); resolve(Buffer.concat(chunks)); }
+      });
+      res.on("end", () => { if (!done) { done = true; resolve(Buffer.concat(chunks)); } });
+      res.on("error", (e) => { if (!done) { done = true; reject(e); } });
+    });
+    req.setTimeout(20000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.on("error", (e) => { if (!done) { done = true; reject(e); } });
+  });
+}
+
+async function probeRemoteCodec(url) {
+  try {
+    const buf = await readHead(url, 1048576);
+    const t = buf.toString("latin1");
+    if (t.includes("V_MPEGH/ISO/HEVC")) return "hevc";
+    return "other";
+  } catch { return null; }
+}
+
+const probeCache = new Map();
+const PROBE_CACHE_TTL = 30 * 60 * 1000;
+async function getCachedProbe(url) {
+  const cached = probeCache.get(url);
+  if (cached && Date.now() - cached.ts < PROBE_CACHE_TTL) return cached.codec;
+  if (probeCache.size > 200) { const k = probeCache.keys().next().value; probeCache.delete(k); }
+  const codec = await probeRemoteCodec(url);
+  probeCache.set(url, { codec, ts: Date.now() });
+  return codec;
+}
+
+function startRemoteTranscode(url, res) {
+  const proc = spawn(ffmpegBin(), transcodeArgs(["-i", "pipe:0"]), { stdio: ["pipe", "pipe", "pipe"] });
+  let errBuf = "";
+  proc.stderr.on("data", d => { const s = d.toString(); errBuf = (errBuf + s).slice(-2000); });
+  proc.stdout.on("error", () => {});
+  res.set({ "Access-Control-Allow-Origin": "*", "Content-Type": "video/mp4", "Accept-Ranges": "none", "Cache-Control": "no-cache, no-store" });
+  res.status(200);
+  proc.stdout.pipe(res);
+  const controller = new AbortController();
+  (async () => {
+    try {
+      let up = null;
+      for (let i = 0; i < 3; i++) {
+        up = await fetch(url, { headers: { ...UPSTREAM_HEADERS }, redirect: "follow", signal: controller.signal });
+        if (up.status === 403 || up.status === 429) {
+          if (up.body) { try { await up.body.cancel(); } catch (e) {} }
+          await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+          continue;
+        }
+        break;
+      }
+      if (!up || !up.ok) throw new Error("Upstream returned " + (up ? up.status : "n/a"));
+      const upBody = toReadable(up.body);
+      upBody.on("error", () => {});
+      upBody.pipe(proc.stdin);
+    } catch (e) { if (!proc.stdin.destroyed) proc.stdin.destroy(e); }
+  })();
+  proc.stdin.on("error", () => {});
+  res.on("close", () => { try { controller.abort(); } catch (e) {} if (!res.writableEnded) proc.kill("SIGKILL"); });
   proc.on("error", e => { if (!res.headersSent) res.status(500).json({ error: "ffmpeg unavailable: " + e.message }); });
   proc.on("close", code => {
     if (code !== 0 && !res.headersSent) res.status(500).json({ error: "Transcode failed: " + (errBuf || ("ffmpeg exited " + code)) });
