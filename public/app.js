@@ -1,5 +1,7 @@
 let resultUrl = null;
 
+const API_BASE = window.API_BASE || "";
+
 function el(id) { return document.getElementById(id); }
 function show(id) { el(id).classList.remove("hidden"); }
 function hide(id) { el(id).classList.add("hidden"); }
@@ -74,7 +76,7 @@ async function resolve() {
   setProgress(10);
 
   try {
-    const r = await fetch("/api/check", {
+    const r = await fetch(API_BASE + "/api/check", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({url})
@@ -99,7 +101,7 @@ async function resolve() {
   setProgress(30);
 
   try {
-    const res = await fetch("/api/organic", {
+    const res = await fetch(API_BASE + "/api/organic", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({url})
@@ -210,7 +212,7 @@ async function tryAutoSubtitle(videoUrl) {
   for (const candidate of candidates) {
     try {
       const encoded = encodeURIComponent(candidate);
-      applySubtitleTrack(`/api/stream/subtitle?url=${encoded}`);
+      applySubtitleTrack(`${API_BASE}/api/stream/subtitle?url=${encoded}`);
       showSubStatus(`Subtitle found: ${candidate.split("/").pop()}`);
       return true;
     } catch {}
@@ -249,7 +251,7 @@ async function loadSubtitle() {
   if (!subUrl) return;
   showSubStatus("Loading subtitle...", "ok");
   try {
-    applySubtitleTrack(`/api/stream/subtitle?url=${encodeURIComponent(subUrl)}`);
+    applySubtitleTrack(`${API_BASE}/api/stream/subtitle?url=${encodeURIComponent(subUrl)}`);
     showSubStatus("Subtitle loaded", "ok");
   } catch (e) { showSubStatus("Failed: " + e.message, "error"); }
 }
@@ -280,7 +282,7 @@ async function searchByTitle() {
   showSubSearchStatus("Searching...", "ok", true);
   el("subResults").innerHTML = "";
   try {
-    const metaRes = await fetch(`/api/stream/metadata?url=x&title=${encodeURIComponent(t)}`);
+    const metaRes = await fetch(`${API_BASE}/api/stream/metadata?url=x&title=${encodeURIComponent(t)}`);
     const meta = await metaRes.json();
     if (meta.imdbId) {
       el("imdbBadge").textContent = meta.imdbId;
@@ -298,7 +300,7 @@ async function searchByTitle() {
         showSubSearchStatus(`Found ${finalResults.length} subtitle(s) for ${meta.title || t}`, "ok", false);
         const best = finalResults[0];
         showSubStatus(`Loading: ${best.display}...`, "ok");
-        const srtUrl = `/api/stream/subtitle?url=${encodeURIComponent(convertWyzieUrl(best.url, best.format))}`;
+        const srtUrl = `${API_BASE}/api/stream/subtitle?url=${encodeURIComponent(convertWyzieUrl(best.url, best.format))}`;
         applySubtitleTrack(srtUrl);
         showSubStatus(`Auto-loaded: ${best.display}`, "ok");
       } else {
@@ -369,7 +371,7 @@ async function loadWyzieSub(sub) {
   try {
     const downloadUrl = convertWyzieUrl(sub.url, sub.format);
     if (!downloadUrl) throw new Error("No download URL");
-    const srtUrl = `/api/stream/subtitle?url=${encodeURIComponent(downloadUrl)}`;
+    const srtUrl = `${API_BASE}/api/stream/subtitle?url=${encodeURIComponent(downloadUrl)}`;
     applySubtitleTrack(srtUrl);
     showSubStatus(`Loaded: ${sub.display} (${sub.release})`, "ok");
   } catch (e) {
@@ -380,7 +382,7 @@ async function loadWyzieSub(sub) {
 async function detectUrlType(url) {
   if (isArchiveLink(url)) return "archive";
   try {
-    const res = await fetch(`/api/stream/archive?url=${encodeURIComponent(url)}&action=info`);
+    const res = await fetch(`${API_BASE}/api/stream/archive?url=${encodeURIComponent(url)}&action=info`);
     if (!res.ok) return "video";
     const info = await res.json();
     if (isArchiveExt(info.name)) return "archive";
@@ -393,7 +395,7 @@ async function loadArchiveContents(archiveUrl) {
   show("archiveLoading");
   el("archiveList").innerHTML = "";
   try {
-    const res = await fetch(`/api/stream/archive?url=${encodeURIComponent(archiveUrl)}&action=list`);
+    const res = await fetch(`${API_BASE}/api/stream/archive?url=${encodeURIComponent(archiveUrl)}&action=list`);
     if (!res.ok) throw new Error("Failed to load archive");
     const data = await res.json();
     renderArchiveFiles(data.files || [], archiveUrl);
@@ -420,7 +422,7 @@ function renderArchiveFiles(files, archiveUrl) {
     btn.onclick = () => {
       const encoded = encodeURIComponent(archiveUrl);
       const encodedFile = encodeURIComponent(JSON.stringify(file));
-      setStreamUrl(`/api/stream/archive?url=${encoded}&action=stream&file=${encodedFile}`);
+      setStreamUrl(`${API_BASE}/api/stream/archive?url=${encoded}&action=stream&file=${encodedFile}`);
       document.querySelectorAll(".archive-item").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
     };
@@ -470,8 +472,8 @@ async function handleStream() {
       return;
     }
     const encoded = encodeURIComponent(url);
-    const proxyUrl = `/api/stream/stream?url=${encoded}`;
-    const res = await fetch(`/api/stream/stream?url=${encoded}`, { method: "HEAD" });
+    const proxyUrl = `${API_BASE}/api/stream/stream?url=${encoded}`;
+    const res = await fetch(`${API_BASE}/api/stream/stream?url=${encoded}`, { method: "HEAD" });
     if (!res.ok) throw new Error(`Cannot fetch video (HTTP ${res.status})`);
     setStreamUrl(proxyUrl);
     streamHistory = [{ url, time: new Date().toLocaleTimeString() }, ...streamHistory.filter(h => h.url !== url)].slice(0, 10);
@@ -515,7 +517,7 @@ el("titleInput").addEventListener("input", () => {
   suggestDebounce = setTimeout(async () => {
     const lang = el("subLangSelect").value;
     try {
-      const res = await fetch(`/api/stream/search?q=${encodeURIComponent(val)}&lang=${lang}`);
+      const res = await fetch(`${API_BASE}/api/stream/search?q=${encodeURIComponent(val)}&lang=${lang}`);
       const data = await res.json();
       renderSuggestions(data.results || []);
     } catch { hide("suggestDropdown"); }
@@ -569,7 +571,7 @@ function selectSuggestion(item) {
         showSubSearchStatus(`Found ${results.length} subtitle(s) for ${item.title}`, "ok", false);
         const best = results[0];
         showSubStatus(`Loading: ${best.display}...`, "ok");
-        const srtUrl = `/api/stream/subtitle?url=${encodeURIComponent(convertWyzieUrl(best.url, best.format))}`;
+        const srtUrl = `${API_BASE}/api/stream/subtitle?url=${encodeURIComponent(convertWyzieUrl(best.url, best.format))}`;
         applySubtitleTrack(srtUrl);
         showSubStatus(`Auto-loaded: ${best.display}`, "ok");
       } else {
@@ -604,7 +606,7 @@ el("urlInput").addEventListener("input", async () => {
   const url = normalizeUrl(el("urlInput").value);
   if (url.length > 10) {
     try {
-      const r = await fetch("/api/check", {
+    const r = await fetch(API_BASE + "/api/check", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify({url})

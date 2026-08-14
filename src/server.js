@@ -13,6 +13,13 @@ const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
 app.use(express.json());
+app.use((req, res, next) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Range, Origin");
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+});
 app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/api", routes);
 app.use("/api/stream", streamRoutes);
