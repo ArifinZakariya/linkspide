@@ -7,6 +7,11 @@ const videoDownloader = require("./services/videoDownloader");
 const router = express.Router();
 
 const API_TIMEOUT = 30000;
+const OUO_TIMEOUT = 90000;
+
+function routeTimeout(url) {
+  return /ouo\.(io|press)/.test(url || "") ? OUO_TIMEOUT : API_TIMEOUT;
+}
 
 function withTimeout(promise, ms) {
   return Promise.race([
@@ -26,7 +31,7 @@ router.post("/resolve", async (req, res) => {
     try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
 
     const shortener = identifyShortener(parsed.href);
-    const result = await withTimeout(resolveUrl(parsed.href, 15), API_TIMEOUT);
+    const result = await withTimeout(resolveUrl(parsed.href, 15), routeTimeout(parsed.href));
 
     res.json({
       original: parsed.href,
@@ -52,7 +57,7 @@ router.post("/organic", async (req, res) => {
     let parsed;
     try { parsed = new URL(url); } catch { return res.status(400).json({ error: "Invalid URL" }); }
 
-    const result = await withTimeout(genericOrganic.visit(parsed.href), API_TIMEOUT);
+    const result = await withTimeout(genericOrganic.visit(parsed.href), routeTimeout(parsed.href));
 
     res.json({
       original: parsed.href,

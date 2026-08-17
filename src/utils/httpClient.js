@@ -8,34 +8,43 @@ const DESKTOP_UA =
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 30 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 30 });
 
+const DEFAULT_TIMEOUT = 8000;
+
+const BASE_CONFIG = {
+  maxRedirects: 0,
+  validateStatus: (s) => (s >= 200 && s < 400) || s === 403,
+  httpAgent,
+  httpsAgent,
+  headers: {
+    "User-Agent": DESKTOP_UA,
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    Connection: "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+  },
+};
+
 let _client = null;
 
 function getClient(opts = {}) {
-  if (_client && !opts.mobile) return _client;
+  const wantTimeout = opts.timeout || DEFAULT_TIMEOUT;
+  const useCache = !opts.mobile && wantTimeout === DEFAULT_TIMEOUT;
+
+  if (useCache && _client) return _client;
 
   const client = axios.create({
-    timeout: opts.timeout || 8000,
-    maxRedirects: 0,
-    validateStatus: (s) => (s >= 200 && s < 400) || s === 403,
-    httpAgent,
-    httpsAgent,
-    headers: {
-      "User-Agent": DESKTOP_UA,
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
-      Connection: "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Cache-Control": "max-age=0",
-    },
+    ...BASE_CONFIG,
+    timeout: wantTimeout,
   });
 
-  if (!opts.mobile) _client = client;
+  if (useCache) _client = client;
   return client;
 }
 

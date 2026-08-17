@@ -1,6 +1,8 @@
 const express = require("express");
 const { solveLivewire } = require("./handlers/livewireSolver");
 const { solveShrinkme } = require("./handlers/shrinkmeSolver");
+const { solveOuo } = require("./handlers/ouoSolver");
+const { solveMove2link, hasClearance } = require("./handlers/move2linkSolver");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -67,10 +69,27 @@ app.post("/api/bypass", async (req, res) => {
 
     if (/shrinkme\.click|shrinke\.me/.test(url)) {
       result = await solveShrinkme(b, url, timeout || 45000);
+    } else if (/ouo\.(io|press)/.test(url)) {
+      result = await solveOuo(b, url, timeout || 60000);
     } else {
       result = await solveLivewire(b, url, timeout);
     }
 
+    res.json(result);
+  } catch (err) {
+    console.error("[ERROR]", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Direct ouo.io bypass endpoint
+app.post("/api/ouo", async (req, res) => {
+  const { url, timeout = 60000 } = req.body;
+  if (!url) return res.status(400).json({ error: "URL is required" });
+
+  try {
+    const b = await getBrowser();
+    const result = await solveOuo(b, url, timeout);
     res.json(result);
   } catch (err) {
     console.error("[ERROR]", err.message);
@@ -91,6 +110,25 @@ app.post("/api/shrinkme", async (req, res) => {
     console.error("[ERROR]", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// move2link.co bypass (uses cf_clearance profile captured manually)
+app.post("/api/move2link", async (req, res) => {
+  const { url, timeout = 60000 } = req.body;
+  if (!url) return res.status(400).json({ error: "URL is required" });
+
+  try {
+    const result = await solveMove2link(url, timeout);
+    res.json(result);
+  } catch (err) {
+    console.error("[ERROR]", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Check cf_clearance availability
+app.get("/api/move2link/status", (req, res) => {
+  res.json({ hasClearance: hasClearance() });
 });
 
 app.listen(PORT, () => {

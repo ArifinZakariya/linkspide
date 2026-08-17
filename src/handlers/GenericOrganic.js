@@ -64,6 +64,14 @@ class GenericOrganic {
           log("FBC redirect: " + (Date.now() - t0) + "ms -> " + fbcResult);
           return { success: true, url: fbcResult, service: service.name, logs, time: Date.now() - t0 };
         }
+        if (PUPPETEER_SERVICE_URL) {
+          log("FBC failed, calling Puppeteer OUO solver...");
+          const ppResult = await this._ouoPuppeteer(url, log);
+          if (ppResult) {
+            log("Puppeteer OUO: " + (Date.now() - t0) + "ms -> " + ppResult);
+            return { success: true, url: ppResult, service: service.name, logs, time: Date.now() - t0 };
+          }
+        }
         return { success: false, error: "OUO bypass failed - Cloudflare or no link found", logs, time: Date.now() - t0 };
       }
 
@@ -163,6 +171,25 @@ class GenericOrganic {
       }
     }
     return null;
+  }
+
+  async _ouoPuppeteer(url, log) {
+    try {
+      const client = getClient({ timeout: 65000 });
+      const res = await client.post(
+        `${PUPPETEER_SERVICE_URL}/api/ouo`,
+        { url, timeout: 60000 },
+        { headers: { "Content-Type": "application/json" }, timeout: 60000 }
+      );
+      if (res.data?.success && res.data?.url) {
+        return res.data.url;
+      }
+      log("Puppeteer OUO failed: " + JSON.stringify(res.data));
+      return null;
+    } catch (err) {
+      log("Puppeteer OUO error: " + err.message);
+      return null;
+    }
   }
 
   async _fastHttpDecode(url, log) {

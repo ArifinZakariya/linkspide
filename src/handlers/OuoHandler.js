@@ -1,6 +1,28 @@
 const BaseHandler = require("./BaseHandler");
 const { getClient } = require("../utils/httpClient");
 
+const PUPPETEER_SERVICE_URL = process.env.PUPPETEER_SERVICE_URL || "";
+
+async function callPuppeteerOuo(url, timeout = 55000) {
+  if (!PUPPETEER_SERVICE_URL) return null;
+  try {
+    const client = getClient({ timeout: timeout + 5000 });
+    const res = await client.post(
+      `${PUPPETEER_SERVICE_URL}/api/ouo`,
+      { url, timeout },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    const data = res.data;
+    if (data && data.success && data.url) {
+      return { finalUrl: data.url, note: "puppeteer-bypass", logs: data.logs };
+    }
+    return null;
+  } catch (err) {
+    console.log("[PUPPETEER-OUO]", err.message);
+    return null;
+  }
+}
+
 class OuoHandler extends BaseHandler {
   get name() {
     return "ouo";
@@ -19,6 +41,8 @@ class OuoHandler extends BaseHandler {
 
     if (html.includes("Just a moment") || html.includes("cf-browser-verification")) {
       if (code) {
+        const puppeteerResult = await callPuppeteerOuo(url);
+        if (puppeteerResult) return puppeteerResult;
         return {
           redirect: `https://ouo.io/fbc/${code}`,
           note: "cloudflare-challenge-via-fbc",
@@ -29,6 +53,8 @@ class OuoHandler extends BaseHandler {
     const hasTurnstile = html.includes("cf-turnstile") || html.includes("data-sitekey");
     if (hasTurnstile) {
       if (code) {
+        const puppeteerResult = await callPuppeteerOuo(url);
+        if (puppeteerResult) return puppeteerResult;
         return {
           redirect: `https://ouo.io/fbc/${code}`,
           note: "turnstile-detected-via-fbc",

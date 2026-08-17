@@ -148,10 +148,15 @@ async function resolveUrl(url, maxDepth = 15) {
         for (const handler of handlers) {
           if (handler.canHandle(current)) {
             found = await handler.extract($, html, current);
-            if (found) {
-              chain.push({ handler: handler.name, extracted: found });
-              break;
-            }
+        if (found) {
+          chain.push({ handler: handler.name, extracted: found });
+          if (found.finalUrl) {
+            current = found.finalUrl;
+            chain.push({ method: "final", url: current, final: true });
+            return { resolved: current, chain, depth, cloudflare: cloudflareDetected };
+          }
+          break;
+        }
           }
         }
 

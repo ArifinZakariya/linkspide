@@ -5,3 +5,7 @@ ouo_debug.html
 cookies.txt
 video-service/cookies.txt
 .tmp/
+opencode.json
+puppeteer-service/.cfclearance.json
+puppeteer-service/.cfclearance-profile/
+move2link_debug.html
