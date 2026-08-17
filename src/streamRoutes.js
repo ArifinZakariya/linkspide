@@ -363,6 +363,48 @@ router.all("/stream", async (req, res) => {
   if (!targetUrl) return res.status(400).json({ error: "Missing url parameter" });
   res.on("finish", () => console.log("[stream] ", req.method, targetUrl.slice(0, 70), "->", res.statusCode));
   const isHead = req.method === "HEAD";
+  const action = req.query.action;
+  if (action === "codec") {
+    try {
+      const resolved = await resolveFinalUrl(targetUrl);
+      const codec = await getCachedProbe(resolved);
+      return res.json({ codec });
+    } catch { return res.json({ codec: null }); }
+  }
+  if (action === "hls" || action === "hlsseg") {
+    try {
+      const resolved = await resolveFinalUrl(targetUrl);
+      const baseSeg = `/api/stream/stream?url=${encodeURIComponent(targetUrl)}&action=hlsseg`;
+      const codec = req.query.codec === "h264" ? "h264" : "hevc";
+      if (action === "hls") {
+        try {
+          const idx = await buildMkvIndex(resolved);
+          const lastDur = (idx.cuePoints[idx.cuePoints.length - 1].time) / 1000;
+          return await serveHlsPlaylist(resolved, `${baseSeg}&codec=${codec}&t=`, res, lastDur);
+        } catch (e) { /* fall through to generic path */ }
+        const remoteDur = await getMediaDuration(resolved);
+        if (remoteDur && remoteDur > 0) {
+          return await serveHlsPlaylist(resolved, `${baseSeg}&remote=1&codec=${codec}&t=`, res, remoteDur);
+        }
+        ensureTempDir();
+        const id = serviceId(targetUrl);
+        const tp = join(TEMP_DIR, `${safeName(id)}_video.mkv`);
+        if (!existsSync(tp)) await downloadStreamToFile(resolved, tp);
+        return await serveHlsPlaylist(tp, `${baseSeg}&t=`, res);
+      }
+      const t = parseFloat(req.query.t) || 0;
+      const d = parseFloat(req.query.d) || HLS_SEG_DUR;
+      if (req.query.remote !== "1") {
+        try { return await serveMkvSegment(resolved, t, d, res, codec); } catch (e) { /* fall through */ }
+      }
+      if (req.query.remote === "1") return startHlsSegment(resolved, t, d, res);
+      ensureTempDir();
+      const id = serviceId(targetUrl);
+      const tp = join(TEMP_DIR, `${safeName(id)}_video.mkv`);
+      if (!existsSync(tp)) await downloadStreamToFile(resolved, tp);
+      return startHlsSegment(tp, t, d, res);
+    } catch (e) { return res.status(500).json({ error: "HLS error: " + e.message }); }
+  }
   if (isMegaUrl(targetUrl)) {
     try {
       if (isHead) {
@@ -1022,6 +1064,286 @@ function startTranscode(tp, res) {
   });
 }
 
+// ===== HLS segmented transcode (seeking support for HEVC) =====
+function ffprobeBin() { return process.env.FFPROBE_PATH || "ffprobe"; }
+const HLS_SEG_DUR = 6;
+
+function getMediaDuration(tp) {
+  return new Promise((resolve) => {
+    const proc = spawn(ffprobeBin(), ["-v", "error", "-show_entries", "format=duration", "-of", "json", tp]);
+    let out = "";
+    proc.stdout.on("data", d => out += d);
+    proc.stderr.on("data", () => {});
+    proc.on("error", () => resolve(null));
+    proc.on("close", () => {
+      try { const j = JSON.parse(out); resolve(parseFloat(j.format.duration) || null); } catch { resolve(null); }
+    });
+  });
+}
+
+function hlsSegmentArgs(tp, start, dur) {
+  return [
+    "-hide_banner", "-loglevel", "error",
+    "-ss", String(start),
+    "-i", tp,
+    "-t", String(dur),
+    "-map", "0:v:0",
+    "-map", "0:a:0?",
+    "-c:v", "libx264",
+    "-preset", "veryfast",
+    "-crf", "23",
+    "-pix_fmt", "yuv420p",
+    "-profile:v", "main",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-ac", "2",
+    "-muxdelay", "0",
+    "-output_ts_offset", String(start),
+    "-f", "mpegts",
+    "pipe:1"
+  ];
+}
+
+function startHlsSegment(tp, start, dur, res) {
+  const proc = spawn(ffmpegBin(), hlsSegmentArgs(tp, start, dur), { stdio: ["ignore", "pipe", "pipe"] });
+  let errBuf = "";
+  proc.stderr.on("data", d => { const s = d.toString(); errBuf = (errBuf + s).slice(-2000); });
+  proc.stdout.on("error", () => {});
+  res.set({ "Access-Control-Allow-Origin": "*", "Content-Type": "video/mp2t", "Cache-Control": "no-cache, no-store" });
+  res.status(200);
+  proc.stdout.pipe(res);
+  res.on("close", () => { if (!res.writableEnded) proc.kill("SIGKILL"); });
+  proc.on("error", e => { if (!res.headersSent) res.status(500).json({ error: "ffmpeg unavailable: " + e.message }); });
+  proc.on("close", code => {
+    if (code !== 0 && !res.headersSent) res.status(500).json({ error: "Segment transcode failed: " + (errBuf || ("ffmpeg exited " + code)) });
+  });
+}
+
+async function serveHlsPlaylist(input, segPrefix, res, knownDur) {
+  const dur = knownDur || await getMediaDuration(input);
+  if (!dur || dur <= 0) return res.status(500).json({ error: "Cannot determine media duration" });
+  const n = Math.max(1, Math.ceil(dur / HLS_SEG_DUR));
+  const lines = ["#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${HLS_SEG_DUR}`, "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-PLAYLIST-TYPE:VOD"];
+  for (let i = 0; i < n; i++) {
+    const t = i * HLS_SEG_DUR;
+    const d = Math.min(HLS_SEG_DUR, dur - t);
+    lines.push(`#EXTINF:${d.toFixed(3)},`);
+    lines.push(`${segPrefix}${t}&d=${d}`);
+  }
+  lines.push("#EXT-X-ENDLIST");
+  res.set({ "Access-Control-Allow-Origin": "*", "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-cache, no-store" });
+  res.send(lines.join("\n"));
+}
+
+async function downloadStreamToFile(url, destPath) {
+  const mod = url.startsWith("https") ? https : http;
+  await new Promise((resolve, reject) => {
+    const req = mod.get(url, { headers: { "User-Agent": "Mozilla/5.0" } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return downloadStreamToFile(res.headers.location, destPath).then(resolve).catch(reject);
+      }
+      const ws = createWriteStream(destPath);
+      res.pipe(ws);
+      ws.on("finish", resolve);
+      ws.on("error", reject);
+      res.on("error", reject);
+    });
+    req.setTimeout(300000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.on("error", reject);
+  });
+}
+
+// ===== Partial-MKV HLS (download only needed clusters, then remux/transcode) =====
+const mkvIndexCache = new Map();
+const MKV_INDEX_TTL = 60 * 60 * 1000;
+
+function mkvVintVal(b, o) {
+  const f = b[o]; let len = 1;
+  for (let m = 7; m >= 0; m--) { if (f & (1 << m)) break; len++; }
+  if (len > 8) len = 1;
+  let val = 0n;
+  for (let i = 0; i < len; i++) {
+    const byte = b[o + i];
+    val = (val << 8n) | BigInt(i === 0 ? (byte & (0xff >> len)) : byte);
+  }
+  return { len, val: Number(val) };
+}
+function mkvElemAt(b, p, end) {
+  const f = b[p]; let idLen = 1;
+  for (let m = 7; m >= 0; m--) { if (f & (1 << m)) break; idLen++; }
+  if (idLen > 4) return null;
+  const id = b.readUIntBE(p, idLen);
+  const sz = mkvVintVal(b, p + idLen);
+  const dataStart = p + idLen + sz.len;
+  const eEnd = dataStart + sz.val;
+  return { id, start: p, dataStart, end: eEnd, size: sz.val, vintLen: sz.len, dataEnd: Math.min(eEnd, end) };
+}
+function mkvChildren(b, start, end, wantId) {
+  const out = [];
+  let p = start;
+  while (p + 1 < end) {
+    const e = mkvElemAt(b, p, end);
+    if (!e) { p += 1; continue; }
+    if (wantId === undefined || e.id === wantId) out.push(e);
+    p = e.end;
+  }
+  return out;
+}
+function mkvEncodeVint(size) {
+  let L = 1;
+  while (L < 8 && size >= Math.pow(2, 8 * L - 1)) L++;
+  const out = Buffer.alloc(L);
+  out[0] = (1 << (8 - L)) | (L < 8 ? (size >> (8 * (L - 1))) : 0);
+  for (let i = 1; i < L; i++) out[i] = (size >> (8 * (L - 1 - i))) & 0xff;
+  return out;
+}
+function fetchRangeBuf(url, start, end) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? https : http;
+    const req = mod.get(url, { headers: { ...UPSTREAM_HEADERS, Range: `bytes=${start}-${end}` } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return fetchRangeBuf(res.headers.location, start, end).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    });
+    req.setTimeout(60000, () => { req.destroy(); reject(new Error("range timeout")); });
+    req.on("error", reject);
+  });
+}
+async function buildMkvIndex(url) {
+  const cached = mkvIndexCache.get(url);
+  if (cached && Date.now() - cached.ts < MKV_INDEX_TTL) return cached;
+  const head = await fetchRangeBuf(url, 0, 262143);
+  let seg = null, p = 0;
+  while (p + 4 < head.length) {
+    const e = mkvElemAt(head, p, head.length);
+    if (!e) { p += 1; continue; }
+    if (e.id === 0x18538067) { seg = e; break; }
+    if (e.end > head.length) break;
+    p = e.end;
+  }
+  if (!seg) throw new Error("Not an MKV (no Segment element)");
+  const sh = mkvChildren(head, seg.dataStart, head.length, 0x114D9B74)[0];
+  if (!sh) throw new Error("No SeekHead in MKV");
+  const entries = mkvChildren(head, sh.dataStart, sh.end, 0x4DBB).map(e => {
+    const k = mkvChildren(head, e.dataStart, e.end);
+    const si = k.find(s => s.id === 0x53AB);
+    const sp = k.find(s => s.id === 0x53AC);
+    return { id: si ? head.readUIntBE(si.dataStart, si.dataEnd - si.dataStart) : 0,
+             pos: seg.dataStart + (sp ? head.readUIntBE(sp.dataStart, sp.dataEnd - sp.dataStart) : 0) };
+  });
+  const info = entries.find(e => e.id === 0x1549A966);
+  const tracks = entries.find(e => e.id === 0x1654AE6B);
+  const cues = entries.find(e => e.id === 0x1C53BB6B);
+  if (!info || !tracks || !cues) throw new Error("Missing Info/Tracks/Cues in SeekHead");
+  const infoBuf = await fetchRangeBuf(url, info.pos, info.pos + 262143);
+  const tracksBuf = await fetchRangeBuf(url, tracks.pos, tracks.pos + 524287);
+  const cuesBuf = await fetchRangeBuf(url, cues.pos, cues.pos + 524287);
+  const infoE = mkvElemAt(infoBuf, 0, infoBuf.length);
+  const tracksE = mkvElemAt(tracksBuf, 0, tracksBuf.length);
+  const cuesE = mkvElemAt(cuesBuf, 0, cuesBuf.length);
+  if (!infoE || !tracksE || !cuesE) throw new Error("Failed to parse MKV header elements");
+  let videoTrack = 1;
+  for (const te of mkvChildren(tracksBuf, tracksE.dataStart, tracksE.end, 0xAE)) {
+    const kids = mkvChildren(tracksBuf, te.dataStart, te.end);
+    const tn = kids.find(k => k.id === 0xD7);
+    const tt = kids.find(k => k.id === 0x83);
+    if (tt && tracksBuf.readUIntBE(tt.dataStart, tt.dataEnd - tt.dataStart) === 1) videoTrack = tn ? tracksBuf.readUIntBE(tn.dataStart, tn.dataEnd - tn.dataStart) : 1;
+  }
+  const cuePoints = mkvChildren(cuesBuf, cuesE.dataStart, cuesE.end, 0xBB).map(cp => {
+    const c = mkvChildren(cuesBuf, cp.dataStart, cp.end);
+    const tm = c.find(s => s.id === 0xB3);
+    const ct = c.find(s => s.id === 0xB7);
+    let cpos = null, ctrack = null;
+    if (ct) {
+      const f = mkvChildren(cuesBuf, ct.dataStart, ct.end, 0xF1)[0];
+      if (f) cpos = cuesBuf.readUIntBE(f.dataStart, f.dataEnd - f.dataStart);
+      const tt = mkvChildren(cuesBuf, ct.dataStart, ct.end, 0xF7)[0];
+      if (tt) ctrack = cuesBuf.readUIntBE(tt.dataStart, tt.dataEnd - tt.dataStart);
+    }
+    return { time: tm ? cuesBuf.readUIntBE(tm.dataStart, tm.dataEnd - tm.dataStart) : null, pos: cpos !== null ? seg.dataStart + cpos : null, track: ctrack };
+  }).filter(c => c.time !== null && c.pos !== null && c.track === videoTrack);
+  if (cuePoints.length < 2) throw new Error("No video cues available for seeking");
+  const index = {
+    headPrefix: head.subarray(0, seg.start),
+    segDataStart: seg.dataStart,
+    infoBytes: infoBuf.subarray(0, infoE.end),
+    tracksBytes: tracksBuf.subarray(0, tracksE.end),
+    cuePoints,
+    fileEnd: seg.dataStart + seg.size,
+    ts: Date.now()
+  };
+  mkvIndexCache.set(url, index);
+  if (mkvIndexCache.size > 100) { const k = mkvIndexCache.keys().next().value; mkvIndexCache.delete(k); }
+  return index;
+}
+function serveMkvSegment(url, t, d, res, codec) {
+  return buildMkvIndex(url).then((index) => {
+    const tMs = Math.max(0, t * 1000);
+    const startCue = index.cuePoints.filter(c => c.time <= tMs).pop() || index.cuePoints[0];
+    const endCue = index.cuePoints.find(c => c.time > tMs + d * 1000);
+    const rangeEnd = endCue ? endCue.pos : index.fileEnd;
+    if (rangeEnd <= startCue.pos) throw new Error("Segment range invalid");
+    const CHUNK = 512 * 1024;
+    const total = rangeEnd - startCue.pos;
+    const n = Math.max(1, Math.ceil(total / CHUNK));
+    const chunks = new Array(n);
+    return Promise.all(new Array(n).fill(0).map(async (_, i) => {
+      const s = startCue.pos + i * CHUNK;
+      const e = Math.min(s + CHUNK - 1, rangeEnd - 1);
+      return fetchRangeBuf(url, s, e);
+    })).then((parts) => {
+      const clusterBuf = Buffer.concat(parts);
+      let p = 0;
+      while (p + 4 < clusterBuf.length) {
+        const e = mkvElemAt(clusterBuf, p, clusterBuf.length);
+        if (!e) { p += 1; continue; }
+        if (e.id === 0x1F43B675) {
+          let q = e.dataStart;
+          while (q + 1 < e.end) {
+            const s = mkvElemAt(clusterBuf, q, e.end);
+            if (!s) { q += 1; continue; }
+            if (s.id === 0xE7) {
+              const len = s.dataEnd - s.dataStart;
+              const v = clusterBuf.readUIntBE(s.dataStart, len);
+              clusterBuf.writeUIntBE(Math.max(0, v - startCue.time), s.dataStart, len);
+              break;
+            }
+            q = s.end;
+          }
+        }
+        p = e.end;
+      }
+      const content = Buffer.concat([index.infoBytes, index.tracksBytes, clusterBuf]);
+      const partial = Buffer.concat([index.headPrefix, Buffer.from([0x18, 0x53, 0x80, 0x67]), mkvEncodeVint(content.length), content]);
+      ensureTempDir();
+      const partPath = join(TEMP_DIR, `mkvseg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mkv`);
+      writeFileSync(partPath, partial);
+      const args = codec === "hevc"
+        ? ["-hide_banner", "-loglevel", "error", "-i", partPath, "-t", String(d), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy", "-c:a", "copy", "-muxdelay", "0", "-output_ts_offset", String(t), "-f", "mpegts", "pipe:1"]
+        : ["-hide_banner", "-loglevel", "error", "-i", partPath, "-t", String(d), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "h264_mf", "-b:v", "3000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-muxdelay", "0", "-output_ts_offset", String(t), "-f", "mpegts", "pipe:1"];
+      const proc = spawn(ffmpegBin(), args, { stdio: ["ignore", "pipe", "pipe"] });
+      let errBuf = "";
+      proc.stderr.on("data", d => { const s = d.toString(); errBuf = (errBuf + s).slice(-2000); });
+      proc.stdout.on("error", () => {});
+      res.set({ "Access-Control-Allow-Origin": "*", "Content-Type": "video/mp2t", "Cache-Control": "no-cache, no-store" });
+      res.status(200);
+      proc.stdout.pipe(res);
+      res.on("close", () => { if (!res.writableEnded) proc.kill("SIGKILL"); });
+      proc.on("error", e => { if (!res.headersSent) res.status(500).json({ error: "ffmpeg unavailable: " + e.message }); });
+      proc.on("close", code => {
+        try { unlinkSync(partPath); } catch (e) {}
+        if (code !== 0 && !res.headersSent) res.status(500).json({ error: "Segment failed: " + (errBuf || ("ffmpeg exited " + code)) });
+      });
+    });
+  });
+}
+
 function readHead(url, maxBytes) {
   return new Promise((resolve, reject) => {
     let done = false;
@@ -1227,6 +1549,29 @@ router.get("/archive", async (req, res) => {
         return;
       }
       return res.end();
+    }
+    if (action === "codec") {
+      if (!filePath) return res.status(400).json({ error: "Missing file" });
+      const file = JSON.parse(filePath);
+      const codec = await probeArchiveCodec(url, file);
+      return res.json({ codec });
+    }
+    if (action === "hls") {
+      if (!filePath) return res.status(400).json({ error: "Missing file" });
+      const file = JSON.parse(filePath);
+      const tp = tempPath(id, file.path);
+      if (!existsSync(tp)) await ensureExtracted(url, id, file);
+      const segPrefix = `/api/stream/archive?url=${encodeURIComponent(url)}&action=hlsseg&file=${encodeURIComponent(filePath)}&t=`;
+      return await serveHlsPlaylist(tp, segPrefix, res);
+    }
+    if (action === "hlsseg") {
+      if (!filePath) return res.status(400).json({ error: "Missing file" });
+      const file = JSON.parse(filePath);
+      const tp = tempPath(id, file.path);
+      if (!existsSync(tp)) await ensureExtracted(url, id, file);
+      const t = parseFloat(req.query.t) || 0;
+      const d = parseFloat(req.query.d) || HLS_SEG_DUR;
+      return startHlsSegment(tp, t, d, res);
     }
     if (action === "progress") {
       if (!filePath) return res.status(400).json({ error: "Missing file" });

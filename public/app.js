@@ -412,9 +412,7 @@ function renderArchiveFiles(files, archiveUrl) {
       `<span class="archive-name">${file.name}</span>` +
       `<span class="archive-size">${ext} &middot; ${sizeMB} MB</span>`;
     btn.onclick = () => {
-      const encoded = encodeURIComponent(archiveUrl);
-      const encodedFile = encodeURIComponent(JSON.stringify(file));
-      setStreamUrl(`${API_BASE}/api/stream/archive?url=${encoded}&action=stream&file=${encodedFile}`);
+      playArchiveFile(archiveUrl, file);
       document.querySelectorAll(".archive-item").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
     };
@@ -422,9 +420,40 @@ function renderArchiveFiles(files, archiveUrl) {
   });
 }
 
-function setStreamUrl(url) {
+function hevcSupported() {
+  try {
+    return !!(window.MediaSource &&
+      (MediaSource.isTypeSupported('video/mp4; codecs="hev1.1.6.L120.90"') ||
+       MediaSource.isTypeSupported('video/mp4; codecs="hvc1.1.6.L120.90"') ||
+       MediaSource.isTypeSupported('video/mp4; codecs="hev1.1.6.L150.90"') ||
+       MediaSource.isTypeSupported('video/mp4; codecs="hvc1.1.6.L150.90"')));
+  } catch { return false; }
+}
+
+async function playArchiveFile(archiveUrl, file) {
+  const encoded = encodeURIComponent(archiveUrl);
+  const encodedFile = encodeURIComponent(JSON.stringify(file));
+  let codec = "other";
+  try {
+    const r = await fetch(`${API_BASE}/api/stream/archive?url=${encoded}&action=codec&file=${encodedFile}`);
+    const d = await r.json();
+    codec = d.codec || "other";
+  } catch {}
+  if (codec === "hevc") {
+    setStreamUrl(`${API_BASE}/api/stream/archive?url=${encoded}&action=hls&file=${encodedFile}&codec=${hevcSupported() ? "hevc" : "h264"}`, true);
+  } else {
+    setStreamUrl(`${API_BASE}/api/stream/archive?url=${encoded}&action=stream&file=${encodedFile}`);
+  }
+}
+
+function destroyHls() {
+  if (window._hls) { try { window._hls.destroy(); } catch {} window._hls = null; }
+}
+
+function setStreamUrl(url, isHls = false) {
   const video = el("streamVideo");
-  video.src = url;
+  destroyHls();
+  let retried = false;
   show("playerWrapper");
   el("centerOverlay").classList.remove("hidden-overlay");
   el("playerLoader").classList.remove("hidden-overlay");
@@ -432,11 +461,44 @@ function setStreamUrl(url) {
   el("durTime").textContent = "0:00";
   el("seekBar").value = 0;
   el("playerControls").classList.add("visible");
+
   video.onloadedmetadata = () => {
     for (let i = 0; i < video.textTracks.length; i++) {
       video.textTracks[i].mode = "showing";
     }
   };
+
+  if (isHls) {
+    if (window.Hls && Hls.isSupported()) {
+      const hls = new Hls({ maxBufferLength: 45, maxMaxBufferLength: 60, backBufferLength: 30, fragLoadingTimeOut: 120000, manifestLoadingTimeOut: 10000, manifestLoadingMaxRetry: 2 });
+      window._hls = hls;
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.ERROR, (e, data) => {
+        if (data.fatal) {
+          if (!retried && url.indexOf("codec=hevc") !== -1) {
+            retried = true;
+            try { hls.destroy(); } catch {}
+            window._hls = null;
+            setStreamUrl(url.replace("codec=hevc", "codec=h264"), true);
+            return;
+          }
+          showStreamError("HLS error: " + data.details);
+        }
+      });
+      return;
+    }
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url;
+      video.play().catch(() => {});
+      return;
+    }
+  }
+
+  video.src = url;
 }
 
 async function handleStream() {
@@ -473,7 +535,17 @@ async function handleStream() {
     const proxyUrl = `${API_BASE}/api/stream/stream?url=${encoded}`;
     const res = await fetch(`${API_BASE}/api/stream/stream?url=${encoded}`, { method: "HEAD" });
     if (!res.ok) throw new Error(`Cannot fetch video (HTTP ${res.status})`);
-    setStreamUrl(proxyUrl);
+    let codec = "other";
+    try {
+      const cr = await fetch(`${API_BASE}/api/stream/stream?url=${encoded}&action=codec`);
+      const cd = await cr.json();
+      codec = cd.codec || "other";
+    } catch {}
+    if (codec === "hevc") {
+      setStreamUrl(`${API_BASE}/api/stream/stream?url=${encoded}&action=hls&codec=${hevcSupported() ? "hevc" : "h264"}`, true);
+    } else {
+      setStreamUrl(proxyUrl);
+    }
     streamHistory = [{ url, time: new Date().toLocaleTimeString() }, ...streamHistory.filter(h => h.url !== url)].slice(0, 10);
     renderHistory();
     const subUrl = el("subUrlInput").value.trim();
