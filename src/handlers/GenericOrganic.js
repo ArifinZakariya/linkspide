@@ -149,6 +149,169 @@ async function callPuppeteerService(url, timeout = 30000) {
   }
 }
 
+async function solveViaVercelPuppeteer(url, log, timeout = 25000) {
+  // Direct puppeteer-core + @sparticuz/chromium for Vercel (no external service)
+  // Handles SFL (cloudflare + khaddavi chain) and TPI/OII (Turnstile)
+  let browser = null;
+  try {
+    let puppeteer, chromium;
+    try {
+      puppeteer = require("puppeteer-core");
+      chromium = require("@sparticuz/chromium");
+    } catch (e) {
+      log("Vercel puppeteer not installed: " + e.message);
+      return null;
+    }
+    log("Launching Vercel puppeteer-core (chromium)...");
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
+    });
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+    log("Goto " + url);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    // Wait for Cloudflare challenge to pass
+    for (let i = 0; i < 10; i++) {
+      const title = await page.title().catch(() => "");
+      if (!/Just a moment/.test(title)) break;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    log("Page loaded: " + (await page.title().catch(() => "")));
+
+    const isSfl = /sfl\.(gl|link)/i.test(url);
+    const isTpi = /tpi\.(li|ac)|oii\.la|clksz\.com|clk\.sh|srtam\.com/i.test(url);
+
+    if (isSfl) {
+      // SFL: extract form and run khaddavi chain via browser fetch
+      await page.waitForSelector("form", { timeout: 5000 }).catch(() => {});
+      const formData = await page.evaluate(() => {
+        const form = document.querySelector("form");
+        if (!form) return null;
+        const data = {};
+        form.querySelectorAll("input[name]").forEach(el => { data[el.name] = el.value || ""; });
+        return { action: form.action, data };
+      });
+      if (formData && formData.action) {
+        log("SFL form found, running khaddavi chain via browser...");
+        // Use page.evaluate to do the API chain with browser cookies
+        const result = await page.evaluate(async (formInfo) => {
+          try {
+            // Get XSRF token from cookie
+            const getCookie = (name) => {
+              const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+              return m ? decodeURIComponent(m[2]) : "";
+            };
+            const xsrf = getCookie("XSRF-TOKEN");
+            if (!xsrf) return { error: "no xsrf" };
+            // Generate dummy fingerprint hash (same as Node)
+            const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(Date.now() + "-" + Math.random())).then(b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,"0")).join(""));
+            const u = "#" + btoa(hash);
+            const token = xsrf.slice(0, 128 - u.length) + u;
+            const headers = { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" };
+            const sess = await fetch("/api/session", { method: "POST", headers, body: JSON.stringify({ _token: token }) }).then(r => r.json());
+            if (!sess || sess.captcha) return { error: "captcha", sess };
+            const verify = await fetch("/api/verify", { method: "POST", headers, body: JSON.stringify({ _a: 0 }) }).then(r => r.json());
+            const go = await fetch("/api/go", { method: "POST", headers, body: JSON.stringify({ key: Math.floor(Math.random()*1000), size: "1200.800", ado: null }) }).then(r => r.json());
+            return { go: go.url, sess, verify };
+          } catch (e) { return { error: e.message }; }
+        }, formData);
+        log("Browser chain result: " + JSON.stringify(result).slice(0,500));
+        if (result && result.go && result.go.startsWith("http")) {
+          // Fetch ready/go page via browser
+          await page.goto(result.go, { waitUntil: "domcontentloaded", timeout: 10000 });
+          const final = await page.evaluate(() => {
+            const m = document.documentElement.innerHTML.match(/window\.location\.href\s*=\s*["']([^"']+)["']/);
+            return m ? m[1].replace(/\\\//g, "/") : null;
+          });
+          if (final && final.startsWith("http")) return final;
+          return result.go; // fallback to ready url, will be resolved via SflHandler
+        }
+      }
+      // Fallback: look for ready/go link directly in page
+      const jsRedir = await page.evaluate(() => {
+        const html = document.documentElement.innerHTML;
+        const m = html.match(/window\.location\.href\s*=\s*["']([^"']+)["']/);
+        return m ? m[1].replace(/\\\//g, "/") : null;
+      });
+      if (jsRedir && jsRedir.startsWith("http") && !/sfl\.(gl|link)/i.test(jsRedir)) return jsRedir;
+    }
+
+    if (isTpi) {
+      // TPI/OII: solve Turnstile via browser interaction (best effort, 15s)
+      log("TPI/OII: trying Turnstile solve via browser...");
+      for (let i = 0; i < 15; i++) {
+        const token = await page.evaluate(() => {
+          const el = document.querySelector('[name="cf-turnstile-response"]');
+          if (el && el.value && el.value.length > 10) return el.value;
+          if (typeof turnstile !== "undefined") { try { const r = turnstile.getResponse(); if (r && r.length > 10) return r; } catch {} }
+          return "";
+        });
+        if (token && token.length > 10) {
+          log("Turnstile token found, submitting...");
+          const apiResult = await page.evaluate(async (tok) => {
+            const form = document.querySelector("form");
+            if (!form) return null;
+            const data = {};
+            form.querySelectorAll("input[name]").forEach(el => { data[el.name] = el.value || ""; });
+            data["cf-turnstile-response"] = tok;
+            data["g-recaptcha-response"] = tok;
+            const body = new URLSearchParams(data).toString();
+            try {
+              const r = await fetch("/links/go", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" }, body });
+              const t = await r.text();
+              return { status: r.status, text: t.slice(0,2000) };
+            } catch (e) { return { error: e.message }; }
+          }, token);
+          log("TPI API result: " + JSON.stringify(apiResult).slice(0,500));
+          if (apiResult && apiResult.text) {
+            try { const j = JSON.parse(apiResult.text); if (j.url && j.url.startsWith("http")) return j.url; } catch {}
+          }
+          break;
+        }
+        // Try clicking Turnstile iframe
+        try {
+          for (const frame of page.frames()) {
+            const fu = frame.url();
+            if (/challenges\.cloudflare\.com/.test(fu)) {
+              await frame.click("input[type=checkbox]").catch(()=>{});
+              await frame.click("body").catch(()=>{});
+            }
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      // Fallback: try to extract destination directly from page after solve attempt
+      const dest = await page.evaluate(() => {
+        const html = document.documentElement.innerHTML;
+        const b64s = html.match(/aHR0cHM6Ly9[A-Za-z0-9+\/=]+/g) || [];
+        for (const b of b64s) { try { const d = atob(b); if (d.startsWith("http") && !/tpi\.(li|ac)|oii\.la/i.test(d)) return d; } catch {} }
+        return null;
+      });
+      if (dest) return dest;
+    }
+
+    // Generic fallback: look for any http link that is not shortlink
+    const generic = await page.evaluate(() => {
+      const html = document.documentElement.innerHTML;
+      const m = html.match(/window\.location\.href\s*=\s*["'](https?:\/\/[^"']+)["']/);
+      if (m && !/tpi\.(li|ac)|oii\.la|sfl\.(gl|link)|ouo|linkvertise/i.test(m[1])) return m[1];
+      return null;
+    });
+    if (generic) return generic;
+
+    return null;
+  } catch (e) {
+    log("Vercel puppeteer error: " + e.message);
+    return null;
+  } finally {
+    if (browser) try { await browser.close(); } catch {}
+  }
+}
+
 const SERVICE_MAP = [
   { name: "OUO", match: /ouo\.(io|press)/, strategy: "ouo", fast: true },
   { name: "TPI", match: /tpi\.(li|ac)|srtam\.com|oii\.la|clksz\.com|clk\.sh|srnky\.com|move2link\.co/, strategy: "tpi", fast: true },
@@ -622,42 +785,64 @@ class GenericOrganic {
   }
 
   async _tpiPuppeteer(url, log) {
-    try {
-      const client = getClient({ timeout: 80000 });
-      const res = await client.post(
-        `${PUPPETEER_SERVICE_URL}/api/tpi`,
-        { url, timeout: 75000 },
-        { headers: { "Content-Type": "application/json" }, timeout: 75000 }
-      );
-      if (res.data?.success && res.data?.url) {
-        return res.data.url;
+    if (PUPPETEER_SERVICE_URL) {
+      try {
+        const client = getClient({ timeout: 80000 });
+        const res = await client.post(
+          `${PUPPETEER_SERVICE_URL}/api/tpi`,
+          { url, timeout: 75000 },
+          { headers: { "Content-Type": "application/json" }, timeout: 75000 }
+        );
+        if (res.data?.success && res.data?.url) {
+          return res.data.url;
+        }
+        log("Puppeteer TPI failed: " + (res.data?.error || "unknown"));
+      } catch (err) {
+        log("Puppeteer TPI error: " + err.message);
       }
-      log("Puppeteer TPI failed: " + (res.data?.error || "unknown"));
-      return null;
-    } catch (err) {
-      log("Puppeteer TPI error: " + err.message);
-      return null;
     }
+    // Fallback to direct Vercel puppeteer-core (no external service)
+    if (process.env.VERCEL || !PUPPETEER_SERVICE_URL) {
+      log("Trying direct Vercel puppeteer-core for TPI/OII...");
+      const direct = await solveViaVercelPuppeteer(url, log, 28000);
+      if (direct) {
+        log("Vercel puppeteer TPI success -> " + direct);
+        return direct;
+      }
+      log("Vercel puppeteer TPI failed");
+    }
+    return null;
   }
 
   async _genericPuppeteer(url, log) {
-    try {
-      const client = getClient({ timeout: 80000 });
-      const res = await client.post(
-        `${PUPPETEER_SERVICE_URL}/api/bypass`,
-        { url, timeout: 75000, strategy: "generic" },
-        { headers: { "Content-Type": "application/json" }, timeout: 75000 }
-      );
-      const data = res.data;
-      if (data && data.success && data.url) {
-        return data.url;
+    if (PUPPETEER_SERVICE_URL) {
+      try {
+        const client = getClient({ timeout: 80000 });
+        const res = await client.post(
+          `${PUPPETEER_SERVICE_URL}/api/bypass`,
+          { url, timeout: 75000, strategy: "generic" },
+          { headers: { "Content-Type": "application/json" }, timeout: 75000 }
+        );
+        const data = res.data;
+        if (data && data.success && data.url) {
+          return data.url;
+        }
+        log("Generic solver failed: " + (data?.error || "unknown"));
+      } catch (err) {
+        log("Generic solver error: " + err.message);
       }
-      log("Generic solver failed: " + (data?.error || "unknown"));
-      return null;
-    } catch (err) {
-      log("Generic solver error: " + err.message);
-      return null;
     }
+    // Fallback to direct Vercel puppeteer-core (for SFL Cloudflare on Vercel)
+    if (process.env.VERCEL || !PUPPETEER_SERVICE_URL) {
+      log("Trying direct Vercel puppeteer-core for generic...");
+      const direct = await solveViaVercelPuppeteer(url, log, 25000);
+      if (direct) {
+        log("Vercel puppeteer generic success -> " + direct);
+        return direct;
+      }
+      log("Vercel puppeteer generic failed");
+    }
+    return null;
   }
 
   async _formSubmitHttp(url, html, log) {
