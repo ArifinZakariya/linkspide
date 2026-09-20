@@ -350,22 +350,34 @@ class GenericOrganic {
           return { success: true, url: tpiResult, service: service.name, logs, time: Date.now() - t0 };
         }
 
-        // Primary: TPI Fast (nodriver + CDP clicks)
-        const tpiFastResult = await solveViaTpiFast(url, log);
-        if (tpiFastResult) {
-          log("TPI Fast: " + (Date.now() - t0) + "ms -> " + tpiFastResult);
-          return { success: true, url: tpiFastResult, service: service.name, logs, time: Date.now() - t0 };
+        // Fast path: if on Vercel Hobby (10s) skip slow browser methods to avoid Request timed out
+        const isVercel = !!process.env.VERCEL;
+        const elapsed = () => Date.now() - t0;
+        if (isVercel && elapsed() > 8000) {
+          log("Vercel timeout risk, returning fast fail for TPI");
+          return { success: false, error: "TPI requires Turnstile - use local bypass or Pro (30s) with PUPPETEER_SERVICE_URL", logs, time: elapsed() };
+        }
+
+        // Primary: TPI Fast (nodriver + CDP clicks) - quick fail if service not running (5s)
+        if (!isVercel || elapsed() < 15000) {
+          const tpiFastResult = await solveViaTpiFast(url, log);
+          if (tpiFastResult) {
+            log("TPI Fast: " + (Date.now() - t0) + "ms -> " + tpiFastResult);
+            return { success: true, url: tpiFastResult, service: service.name, logs, time: Date.now() - t0 };
+          }
         }
 
         // Fallback: old nodriver TPI Service
-        const tpiServiceResult = await solveViaTpiService(url, log);
-        if (tpiServiceResult) {
-          log("TPI Service: " + (Date.now() - t0) + "ms -> " + tpiServiceResult);
-          return { success: true, url: tpiServiceResult, service: service.name, logs, time: Date.now() - t0 };
+        if (!isVercel || elapsed() < 20000) {
+          const tpiServiceResult = await solveViaTpiService(url, log);
+          if (tpiServiceResult) {
+            log("TPI Service: " + (Date.now() - t0) + "ms -> " + tpiServiceResult);
+            return { success: true, url: tpiServiceResult, service: service.name, logs, time: Date.now() - t0 };
+          }
         }
 
         // Fallback to Puppeteer if available
-        if (PUPPETEER_SERVICE_URL) {
+        if (PUPPETEER_SERVICE_URL && elapsed() < 25000) {
           log("TPI HTTP failed, trying Puppeteer TPI solver...");
           const tpiPpResult = await this._tpiPuppeteer(url, log);
           if (tpiPpResult) {
@@ -375,18 +387,21 @@ class GenericOrganic {
           log("Puppeteer TPI failed");
         }
 
-        // Final fallback: direct nodriver bypass (spawns bypass_nodriver.py)
-        log("All TPI services failed, trying direct nodriver bypass...");
-        const nodriverResult = await runNodriverBypass(url, log);
-        if (nodriverResult) {
-          log("Nodriver bypass: " + (Date.now() - t0) + "ms -> " + nodriverResult);
-          return { success: true, url: nodriverResult, service: service.name, logs, time: Date.now() - t0 };
+        // Final fallback: direct nodriver bypass (spawns bypass_nodriver.py) - only if not Vercel or has time
+        if ((!isVercel && elapsed() < 80000) || (isVercel && elapsed() < 15000)) {
+          log("All TPI services failed, trying direct nodriver bypass...");
+          const nodriverResult = await runNodriverBypass(url, log);
+          if (nodriverResult) {
+            log("Nodriver bypass: " + (Date.now() - t0) + "ms -> " + nodriverResult);
+            return { success: true, url: nodriverResult, service: service.name, logs, time: Date.now() - t0 };
+          }
         }
 
         // Last resort: direct Vercel puppeteer-core (works on Vercel hnd1 and locally if puppeteer-core installed)
-        log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
-        const vercelDirect = await solveViaVercelPuppeteer(url, log, 30000);
-        if (vercelDirect) {
+        if (elapsed() < 25000) {
+          log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
+          const vercelDirect = await solveViaVercelPuppeteer(url, log, 15000);
+          if (vercelDirect) {
           log("Vercel direct puppeteer TPI success -> " + vercelDirect);
           return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
         }
