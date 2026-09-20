@@ -6,11 +6,14 @@ const videoDownloader = require("./services/videoDownloader");
 
 const router = express.Router();
 
-const API_TIMEOUT = 30000;
+const API_TIMEOUT = 60000;
 const OUO_TIMEOUT = 90000;
+const TPI_TIMEOUT = 90000;
 
 function routeTimeout(url) {
-  return /ouo\.(io|press)/.test(url || "") ? OUO_TIMEOUT : API_TIMEOUT;
+  if (/ouo\.(io|press)/.test(url || "")) return OUO_TIMEOUT;
+  if (/tpi\.(li|ac)|oii\.la|srtam\.com|clksz\.com|clk\.sh|srnky\.com/i.test(url || "")) return TPI_TIMEOUT;
+  return API_TIMEOUT;
 }
 
 function withTimeout(promise, ms) {
