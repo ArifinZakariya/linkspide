@@ -282,8 +282,49 @@ class GenericOrganic {
             return { success: true, url: pyResult, service: service.name, logs, time: Date.now() - t0 };
           }
         }
-        // For sfl.link WAF, Puppeteer may solve the challenge + then run khaddavi chain
-        if (/sfl\.(gl|link)|khaddavi\.net/i.test(url)) {
+        // For sfl.* Cloudflare (Vercel IP flagged) - try cloudscraper / direct SFL handler before Puppeteer
+        if (/sfl\.(gl|link)/i.test(url)) {
+          log("Cloudflare on sfl, trying cloudscraper & direct SFL handler bypass...");
+          // Try cloudscraper to get the initial form html without Cloudflare block
+          try {
+            const cloudscraper = require("cloudscraper");
+            log("Fetching sfl via cloudscraper...");
+            const csHtml = await cloudscraper.get(url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+            if (csHtml && csHtml.includes("redirect.php")) {
+              log("cloudscraper got form html, running SFL handler...");
+              const SflHandler = require("./SflHandler");
+              const sfl = new SflHandler();
+              const $cs = load(csHtml);
+              const found = await sfl.extract($cs, csHtml, url);
+              if (found && found.redirect) {
+                log("cloudscraper SFL success -> " + found.redirect);
+                return { success: true, url: found.redirect, service: service.name, logs, time: Date.now() - t0 };
+              }
+              // Also try GenericOrganic's _formSubmitHttp with the cloudscraper html
+              const csResult = await this._formSubmitHttp(url, csHtml, log);
+              if (csResult) {
+                log("cloudscraper _formSubmitHttp success -> " + csResult);
+                return { success: true, url: csResult, service: service.name, logs, time: Date.now() - t0 };
+              }
+            } else {
+              log("cloudscraper did not return form html");
+            }
+          } catch (e) {
+            log("cloudscraper error: " + e.message);
+          }
+          // Try direct SFL handler bypass even with Cloudflare html (may fallback to sfl.gl)
+          try {
+            const SflHandler = require("./SflHandler");
+            const sfl = new SflHandler();
+            const $tmp = load(html);
+            const found2 = await sfl.extract($tmp, html, url);
+            if (found2 && found2.redirect) {
+              log("Direct SFL handler success -> " + found2.redirect);
+              return { success: true, url: found2.redirect, service: service.name, logs, time: Date.now() - t0 };
+            }
+          } catch (e) {
+            log("Direct SFL error: " + e.message);
+          }
           log("Trying Puppeteer for sfl/khaddavi WAF...");
         }
         const ppResult = await this._genericPuppeteer(url, log);
@@ -291,7 +332,7 @@ class GenericOrganic {
           log("Puppeteer generic solver: " + (Date.now() - t0) + "ms -> " + ppResult);
           return { success: true, url: ppResult, service: service.name, logs, time: Date.now() - t0 };
         }
-        return { success: false, error: isWaf ? "WAF challenge detected - use Puppeteer" : "Cloudflare challenge detected", logs, time: Date.now() - t0 };
+        return { success: false, error: isWaf ? "WAF challenge detected - use Puppeteer (set PUPPETEER_SERVICE_URL) or try local bypass" : "Cloudflare challenge detected - Vercel IP flagged, retry locally or set PUPPETEER_SERVICE_URL / deploy to hnd1 region", logs, time: Date.now() - t0 };
       }
 
       const strategy = service.strategy === "auto" ? this._detectStrategy(html) : service.strategy;
