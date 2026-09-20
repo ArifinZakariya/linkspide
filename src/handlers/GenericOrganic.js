@@ -383,7 +383,15 @@ class GenericOrganic {
           return { success: true, url: nodriverResult, service: service.name, logs, time: Date.now() - t0 };
         }
 
-        return { success: false, error: "TPI bypass failed - all methods exhausted", logs, time: Date.now() - t0 };
+        // Last resort: direct Vercel puppeteer-core (works on Vercel hnd1 and locally if puppeteer-core installed)
+        log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
+        const vercelDirect = await solveViaVercelPuppeteer(url, log, 30000);
+        if (vercelDirect) {
+          log("Vercel direct puppeteer TPI success -> " + vercelDirect);
+          return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
+        }
+
+        return { success: false, error: "TPI bypass failed - all methods exhausted (try different link or set PUPPETEER_SERVICE_URL/EZSOLVER_URL, or check if link is valid/expired)", logs, time: Date.now() - t0 };
       }
 
       if (service.name === "OUO") {
@@ -639,8 +647,8 @@ class GenericOrganic {
 
   async _tpiHttp(url, log) {
     try {
-      // Check HARDCODED destinations first (known aliases bypass captcha)
-      const alias = url.match(/tpi\.(li|ac)\/([A-Za-z0-9]+)/)?.[2];
+      // Check HARDCODED destinations first (known aliases bypass captcha) - works for all TPI hosts
+      const alias = url.split('/').pop()?.split('?')[0]?.split('#')[0];
       if (alias) {
         const TpiHandler = require("./TpiHandler");
         const HARDCODED = TpiHandler.HARDCODED || {};
