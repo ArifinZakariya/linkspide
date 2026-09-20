@@ -398,10 +398,9 @@ class GenericOrganic {
         }
 
         // Last resort: direct Vercel puppeteer-core (works on Vercel hnd1 and locally if puppeteer-core installed)
-        if (getElapsed() < 25000) {
-          log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
-          const vercelDirect = await solveViaVercelPuppeteer(url, log, 30000);
-          if (vercelDirect) {
+        log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
+        const vercelDirect = await solveViaVercelPuppeteer(url, log, 25000);
+        if (vercelDirect) {
             log("Vercel direct puppeteer TPI success -> " + vercelDirect);
             return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
           }

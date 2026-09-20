@@ -2,7 +2,7 @@
   "regions": ["hnd1"],
   "functions": {
     "api/index.js": {
-      "maxDuration": 60
+      "maxDuration": 90
     }
   },
   "rewrites": [
