@@ -35,6 +35,11 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`\n  ShortLink Bypass running at http://${HOST}:${PORT}\n`);
-});
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`\n  ShortLink Bypass running at http://${HOST}:${PORT}\n`);
+  });
+}
+
+module.exports = app;
+module.exports.server = server;
