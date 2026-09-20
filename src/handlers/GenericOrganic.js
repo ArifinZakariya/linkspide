@@ -352,14 +352,14 @@ class GenericOrganic {
 
         // Fast path: if on Vercel Hobby (10s) skip slow browser methods to avoid Request timed out
         const isVercel = !!process.env.VERCEL;
-        const elapsed = () => Date.now() - t0;
-        if (isVercel && elapsed() > 8000) {
+        const getElapsed = () => Date.now() - t0;
+        if (isVercel && getElapsed() > 8000) {
           log("Vercel timeout risk, returning fast fail for TPI");
-          return { success: false, error: "TPI requires Turnstile - use local bypass or Pro (30s) with PUPPETEER_SERVICE_URL", logs, time: elapsed() };
+          return { success: false, error: "TPI requires Turnstile - use local bypass or Pro (30s) with PUPPETEER_SERVICE_URL", logs, time: getElapsed() };
         }
 
         // Primary: TPI Fast (nodriver + CDP clicks) - quick fail if service not running (5s)
-        if (!isVercel || elapsed() < 15000) {
+        if (!isVercel || getElapsed() < 15000) {
           const tpiFastResult = await solveViaTpiFast(url, log);
           if (tpiFastResult) {
             log("TPI Fast: " + (Date.now() - t0) + "ms -> " + tpiFastResult);
@@ -368,7 +368,7 @@ class GenericOrganic {
         }
 
         // Fallback: old nodriver TPI Service
-        if (!isVercel || elapsed() < 20000) {
+        if (!isVercel || getElapsed() < 20000) {
           const tpiServiceResult = await solveViaTpiService(url, log);
           if (tpiServiceResult) {
             log("TPI Service: " + (Date.now() - t0) + "ms -> " + tpiServiceResult);
@@ -377,7 +377,7 @@ class GenericOrganic {
         }
 
         // Fallback to Puppeteer if available
-        if (PUPPETEER_SERVICE_URL && elapsed() < 25000) {
+        if (PUPPETEER_SERVICE_URL && getElapsed() < 25000) {
           log("TPI HTTP failed, trying Puppeteer TPI solver...");
           const tpiPpResult = await this._tpiPuppeteer(url, log);
           if (tpiPpResult) {
@@ -388,7 +388,7 @@ class GenericOrganic {
         }
 
         // Final fallback: direct nodriver bypass (spawns bypass_nodriver.py) - only if not Vercel or has time
-        if ((!isVercel && elapsed() < 80000) || (isVercel && elapsed() < 15000)) {
+        if ((!isVercel && getElapsed() < 80000) || (isVercel && getElapsed() < 15000)) {
           log("All TPI services failed, trying direct nodriver bypass...");
           const nodriverResult = await runNodriverBypass(url, log);
           if (nodriverResult) {
@@ -398,12 +398,13 @@ class GenericOrganic {
         }
 
         // Last resort: direct Vercel puppeteer-core (works on Vercel hnd1 and locally if puppeteer-core installed)
-        if (elapsed() < 25000) {
+        if (getElapsed() < 25000) {
           log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
-          const vercelDirect = await solveViaVercelPuppeteer(url, log, 15000);
+          const vercelDirect = await solveViaVercelPuppeteer(url, log, 30000);
           if (vercelDirect) {
-          log("Vercel direct puppeteer TPI success -> " + vercelDirect);
-          return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
+            log("Vercel direct puppeteer TPI success -> " + vercelDirect);
+            return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
+          }
         }
 
         return { success: false, error: "TPI bypass failed - all methods exhausted (try different link or set PUPPETEER_SERVICE_URL/EZSOLVER_URL, or check if link is valid/expired)", logs, time: Date.now() - t0 };
@@ -706,6 +707,31 @@ class GenericOrganic {
       if (linkMatches.length) {
         log("TPI found " + linkMatches.length + " banner links (ads, skipping): " + linkMatches.map(m=>m[1]).join(", "));
       }
+
+      // Try direct POST without Turnstile (fast, works for some TPI links that don't enforce captcha)
+      log("TPI trying direct POST without Turnstile (fast)...");
+      try {
+        const c = getClient({ timeout: 8000 });
+        const alias0 = url.split('/').pop()?.split('?')[0] || "";
+        const html0 = html;
+        const tVal0 = html0.match(/name="token" value="([^"]+)"/)?.[1] || "";
+        const aVal0 = html0.match(/name="alias" value="([^"]+)"/)?.[1] || alias0;
+        const dVal0 = html0.match(/name="c_d" value="([^"]+)"/)?.[1] || "";
+        const ctVal0 = html0.match(/name="c_t" value="([^"]+)"/)?.[1] || "";
+        const p0 = new URLSearchParams({ token: tVal0, alias: aVal0, c_d: dVal0, c_t: ctVal0, ad_type: "2", visit_token: "", url });
+        const o0 = new URL(url).origin;
+        for (const ep of [`${o0}/links/go`, "https://srnky.com/links/go", "https://tpi.li/links/go", "https://oii.la/links/go"]) {
+          try {
+            const rr = await c.post(ep, p0.toString(), { headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: url, Origin: o0, "X-Requested-With": "XMLHttpRequest" }, timeout: 5000 });
+            const jj = typeof rr.data === "string" ? JSON.parse(rr.data) : rr.data;
+            if (jj?.url && jj.url.startsWith("http") && !isAd(jj.url) && !/tpi\.(li|ac)|oii\.la|srnky\.com/i.test(jj.url)) {
+              log(`Direct POST success ${ep} -> ${jj.url}`);
+              return jj.url;
+            }
+          } catch {}
+        }
+        log("Direct POST without token failed");
+      } catch (e) { log("Direct POST error: " + e.message); }
 
       // No destination found via HTTP - try EzSolver with cookies from page
       log("TPI HTTP found no valid destination - trying EzSolver...");
