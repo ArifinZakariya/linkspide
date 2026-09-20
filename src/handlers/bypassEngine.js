@@ -4,6 +4,7 @@ const { identifyShortener } = require("./registry");
 
 const OuoHandler = require("./OuoHandler");
 const LinkvertiseHandler = require("./LinkvertiseHandler");
+const PhpShortenerHandler = require("./PhpShortenerHandler");
 const ShrinkmeHandler = require("./ShrinkmeHandler");
 const GplinksHandler = require("./GplinksHandler");
 const SafelinkHandler = require("./SafelinkHandler");
@@ -11,11 +12,16 @@ const CountdownHandler = require("./CountdownHandler");
 const TokenBypassHandler = require("./TokenBypassHandler");
 const ObfuscatedHandler = require("./ObfuscatedHandler");
 const GenericRedirectHandler = require("./GenericRedirectHandler");
+const TpiHandler = require("./TpiHandler");
+const SflHandler = require("./SflHandler");
 const livewireHandler = require("./LivewireHandler");
 
 const handlers = [
+  new SflHandler(),
+  new TpiHandler(),
   new OuoHandler(),
   new LinkvertiseHandler(),
+  new PhpShortenerHandler(),
   new ShrinkmeHandler(),
   new GplinksHandler(),
   new SafelinkHandler(),
@@ -25,7 +31,7 @@ const handlers = [
   new GenericRedirectHandler(),
 ];
 
-const OVERALL_TIMEOUT = 25000;
+const OVERALL_TIMEOUT = 90000;
 
 async function decodeToken(url, token) {
   if (!token) return null;
@@ -84,6 +90,18 @@ async function resolveUrl(url, maxDepth = 15) {
   let cloudflareDetected = false;
   const startTime = Date.now();
 
+  // Unwrap Facebook l.php / fb redirect links
+  if (/facebook\.com\/l\.php|fbclid/.test(current)) {
+    try {
+      const u = new URL(current);
+      const target = u.searchParams.get("u");
+      if (target && target.startsWith("http")) {
+        chain.push({ url: current, status: "facebook-unwrap", to: target });
+        current = target;
+      }
+    } catch {}
+  }
+
   for (let depth = 0; depth < maxDepth; depth++) {
     if (Date.now() - startTime > OVERALL_TIMEOUT) {
       chain.push({ note: "Overall timeout reached", final: true });
@@ -140,6 +158,23 @@ async function resolveUrl(url, maxDepth = 15) {
         }
       }
 
+      // For sfl.* (AWS WAF), try handler directly even if html empty / WAF
+      if (/sfl\.(gl|link)/i.test(current)) {
+        const sflHandler = handlers.find(h => h.name === "sfl");
+        if (sflHandler) {
+          try {
+            const { load } = require("cheerio");
+            const $tmp = html ? load(html) : load("<html></html>");
+            const found = await sflHandler.extract($tmp, html || "", current);
+            if (found && found.redirect) {
+              chain.push({ handler: "sfl", extracted: found, method: "direct-bypass" });
+              current = found.redirect;
+              continue;
+            }
+          } catch (e) {}
+        }
+      }
+
       if (finalUrl === current && html) {
         const $ = load(html);
         let found = null;
@@ -166,11 +201,21 @@ async function resolveUrl(url, maxDepth = 15) {
         }
 
         if (!found) {
+          // Special handling for TPI - requires Puppeteer / captcha solve
+          if (/tpi\.(li|ac)|srtam\.com/i.test(current)) {
+            chain.push({ note: "TPI requires Turnstile captcha - use /api/organic with Puppeteer service", final: true });
+            return { resolved: current, chain, depth, cloudflare: cloudflareDetected, error: "TPI requires Turnstile captcha - use organic bypass with Puppeteer service" };
+          }
           chain.push({ final: true });
           return { resolved: current, chain, depth, cloudflare: cloudflareDetected };
         }
 
         if (found.redirect) {
+          // Filter ad URLs
+          if (/taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved|peccaryentraps|ek\.warlessstarved|sxa?\.peccaryentraps|cloudfront\.net.*\?zgiqd/i.test(found.redirect)) {
+            chain.push({ note: "Handler returned ad URL, ignoring", redirect: found.redirect, final: true });
+            return { resolved: current, chain, depth, cloudflare: cloudflareDetected, error: "Handler returned ad URL - captcha required" };
+          }
           current = found.redirect.startsWith("http")
             ? found.redirect
             : new URL(found.redirect, current).href;
@@ -180,9 +225,12 @@ async function resolveUrl(url, maxDepth = 15) {
         if (found.formData && found.formAction) {
           const decoded = await decodeToken(current, found.formData.token || found.formData._token || "");
           if (decoded) {
-            chain.push({ decoded, method: "token-decode" });
-            current = decoded;
-            continue;
+            // Filter ad destinations
+            if (!/taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved|peccaryentraps|cloudfront\.net/i.test(decoded)) {
+              chain.push({ decoded, method: "token-decode" });
+              current = decoded;
+              continue;
+            }
           }
 
           try {
@@ -191,9 +239,19 @@ async function resolveUrl(url, maxDepth = 15) {
             const postUrl = found.formAction.startsWith("http")
               ? found.formAction
               : new URL(found.formAction, current).href;
+            // Skip known ad form actions without captcha - they just lead to ads
+            if (/advertisingcamps\.com|hai8g\.com|taboola\.com/i.test(postUrl)) {
+              chain.push({ note: "Skipping ad form submit without captcha", action: postUrl, final: true });
+              return { resolved: current, chain, depth, cloudflare: cloudflareDetected, error: "Captcha required - use organic bypass with Puppeteer" };
+            }
             const formRes = await submitForm(postUrl, found.formData, current, client);
             const loc = formRes.headers?.location;
             if (loc) {
+              // Filter ad redirects
+              if (/taboola\.com|advertisingcamps\.com|hai8g\.com/i.test(loc)) {
+                chain.push({ note: "Form submit led to ad page, not destination", redirect: loc, final: true });
+                return { resolved: current, chain, depth, cloudflare: cloudflareDetected, error: "Form submit returned ad page - captcha required" };
+              }
               current = loc.startsWith("http") ? loc : new URL(loc, postUrl).href;
               chain.push({ formSubmit: true, redirect: current });
               continue;

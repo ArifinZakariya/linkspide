@@ -1,0 +1,33 @@
+============================================
+DAFTAR LINK YANG BISA DI-BYPASS
+TrobosLink - AI Link Bypass
+============================================
+
+--- Link Bypass (tab: Bypass Link) ---
+ouo.io / ouo.press
+zovo.ink / go.zovo.ink
+vuotlink.xyz / oklink2.online
+linkvertise.com
+link-target.net / link-center.net / link-hub.net / direct-link.net
+shrinkme.io / shrinkme.click / shrinke.me
+facebook.com/l.php
+sfl.gl / sfl.link
+khaddavi.net / app.khaddavi.net / safelinku.com
+droplink.co
+adf.ly / sh.st / gplinks / exe.io / tpi.li / dl-protect
+gplinks.com / gplink.co / gplink.net
+mitly.us / cutp.in / fc.lc / za.gl / tnlink.in
+exe.io / tei.ai / cuturl.cc / linksfly.com
+pndk.to / urlwebsite.com
+tutwuri.id / khaddavi.net
+shorte.st / bit.ly / tinyurl.com / t.co / is.gd / v.gd / rb.gy
+rebrand.ly / buff.ly / shorturl.at
+
+--- Link Streaming (tab: Link Streaming) ---
+terabox.com / dm.terabox.com / terabox.app / 1024terabox.com / 4funbox.com
+pixeldrain.com / Google Drive / Mega.nz / MediaFire / GoFile / Catbox
+
+--- Catatan ---
+- Link yang dilindungi anti-bot kuat (mis. linksloot.net, anonlink.io dengan
+  Cloudflare Turnstile interaktif) tidak dapat di-bypass otomatis.
+- TeraBox memerlukan cookie login (TERABOX_COOKIE) untuk streaming langsung.

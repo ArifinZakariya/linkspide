@@ -2,6 +2,134 @@ const { load } = require("cheerio");
 const { getClient, followRedirects } = require("../utils/httpClient");
 
 const PUPPETEER_SERVICE_URL = process.env.PUPPETEER_SERVICE_URL || "";
+const EZSOLVER_URL = (process.env.EZSOLVER_URL || process.env.EZSOLVER_SERVICE_URL || "http://127.0.0.1:8191").replace(/\/$/, "");
+const TPI_FAST_URL = (process.env.TPI_FAST_URL || "http://127.0.0.1:8194").replace(/\/$/, "");
+const TPI_SERVICE_URL = (process.env.TPI_SERVICE_URL || "http://127.0.0.1:8192").replace(/\/$/, "");
+const HTTP_BYPASS_URL = (process.env.HTTP_BYPASS_URL || "http://127.0.0.1:8193").replace(/\/$/, "");
+
+async function solveViaHttpBypass(url, log) {
+  try {
+    const client = getClient({ timeout: 40000 });
+    log(`Trying HTTP bypass (cloudscraper) -> ${HTTP_BYPASS_URL}/bypass`);
+    const r = await client.post(`${HTTP_BYPASS_URL}/bypass`, { url, timeout: 30 }, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 35000,
+    });
+    if (r.data?.destination && r.data.destination.startsWith("http")) {
+      log(`HTTP bypass success (${r.data.elapsed}s) -> ${r.data.destination}`);
+      return r.data.destination;
+    }
+    log(`HTTP bypass no destination: ${JSON.stringify(r.data).slice(0,400)}`);
+  } catch (e) {
+    log(`HTTP bypass error: ${e.message}`);
+  }
+  return null;
+}
+
+async function solveViaTpiFast(url, log) {
+  try {
+    const client = getClient({ timeout: 160000 });
+    log(`Trying TPI Fast (nodriver+CDP) -> ${TPI_FAST_URL}/bypass`);
+    const r = await client.post(`${TPI_FAST_URL}/bypass`, { url, timeout: 150 }, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 155000,
+    });
+    if (r.data?.destination && r.data.destination.startsWith("http")) {
+      log(`TPI Fast success (${r.data.elapsed}s) -> ${r.data.destination}`);
+      return r.data.destination;
+    }
+    log(`TPI Fast no destination: ${JSON.stringify(r.data).slice(0,400)}`);
+  } catch (e) {
+    log(`TPI Fast error: ${e.message}`);
+  }
+  return null;
+}
+
+async function solveViaTpiService(url, log) {
+  try {
+    const client = getClient({ timeout: 130000 });
+    log(`Trying TPI Service (nodriver) -> ${TPI_SERVICE_URL}/bypass`);
+    const r = await client.post(`${TPI_SERVICE_URL}/bypass`, { url, timeout: 120 }, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 125000,
+    });
+    if (r.data?.destination && r.data.destination.startsWith("http")) {
+      log(`TPI Service success (${r.data.elapsed}s) -> ${r.data.destination}`);
+      return r.data.destination;
+    }
+    log(`TPI Service no destination: ${JSON.stringify(r.data).slice(0,400)}`);
+  } catch (e) {
+    log(`TPI Service error: ${e.message}`);
+  }
+  return null;
+}
+
+async function solveViaEzSolver(url, sitekey, log) {
+  try {
+    const client = getClient({ timeout: 55000 });
+    log(`Trying EzSolver (unlimited free) -> ${EZSOLVER_URL}/solve sitekey=${sitekey}`);
+    const r = await client.post(`${EZSOLVER_URL}/solve`, { sitekey, siteurl: url, timeout: 45 }, { headers: { "Content-Type": "application/json" }, timeout: 50000 });
+    if (r.data?.token && r.data.token.length > 10) {
+      log(`EzSolver success tokenLen=${r.data.token.length} elapsed=${r.data.elapsed}s`);
+      return r.data.token;
+    }
+    log(`EzSolver no token: ${JSON.stringify(r.data).slice(0,400)}`);
+  } catch (e) {
+    log(`EzSolver error: ${e.message}`);
+  }
+  return null;
+}
+
+function runNodriverBypass(url, log) {
+  const fs = require("fs");
+  const path = require("path");
+  const { spawn } = require("child_process");
+
+  const script = path.join(__dirname, "..", "..", "bypass_nodriver.py");
+  if (!fs.existsSync(script)) {
+    log("bypass_nodriver.py not found");
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    log(`Running nodriver bypass for ${url}...`);
+    const proc = spawn("python", [script, url], {
+      timeout: 160000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (d) => { stdout += d.toString(); });
+    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+
+    proc.on("close", (code) => {
+      const output = stdout + "\n" + stderr;
+
+      const m1 = output.match(/SUCCESS\s*\([\d.]+s\):\s*(https?:\/\/\S+)/);
+      if (m1 && !/taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved\.com/i.test(m1[1])) {
+        log(`Nodriver SUCCESS: ${m1[1]}`);
+        resolve(m1[1]);
+        return;
+      }
+
+      const m2 = output.match(/DESTINATION[^:]*:\s*(https?:\/\/\S+)/);
+      if (m2 && !/taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved\.com/i.test(m2[1])) {
+        log(`Nodriver DESTINATION: ${m2[1]}`);
+        resolve(m2[1]);
+        return;
+      }
+
+      log("Nodriver: no valid destination found" + (code !== 0 ? ` (exit ${code})` : ""));
+      resolve(null);
+    });
+
+    proc.on("error", (e) => {
+      log(`Nodriver error: ${e.message}`);
+      resolve(null);
+    });
+  });
+}
 
 async function callPuppeteerService(url, timeout = 30000) {
   if (!PUPPETEER_SERVICE_URL) return null;
@@ -23,14 +151,16 @@ async function callPuppeteerService(url, timeout = 30000) {
 
 const SERVICE_MAP = [
   { name: "OUO", match: /ouo\.(io|press)/, strategy: "ouo", fast: true },
-  { name: "TPI", match: /tpi\.(li|ac)|srtam\.com/, strategy: "token-decode", fast: true },
-  { name: "Linkvertise", match: /linkvertise\.com/, strategy: "linkvertise", fast: false },
+  { name: "TPI", match: /tpi\.(li|ac)|srtam\.com|oii\.la|clksz\.com|clk\.sh|srnky\.com|move2link\.co/, strategy: "tpi", fast: true },
+  { name: "Linkvertise", match: /linkvertise\.com|link-target\.net|link-center\.net|link-hub\.net|direct-link\.net/, strategy: "linkvertise", fast: false },
+  { name: "PhpShortener", match: /zovo\.ink|vuotlink\.xyz|oklink2\.online/, strategy: "phpshortener", fast: false },
   { name: "ShrinkMe", match: /shrinkme\.(io|click)|shrinke\.me/, strategy: "shrinkme", fast: false },
   { name: "Shorte.st", match: /shorte\.st|sh\.st/, strategy: "countdown-click", fast: false },
   { name: "Adf.ly", match: /adf\.ly/, strategy: "countdown-click", fast: false },
   { name: "GPLinks", match: /gplinks?\.(com|co|net)|mitly\.us|cutp\.in|fc\.lc|za\.gl|tnlink\.in/, strategy: "countdown-form", fast: false },
   { name: "Adtival", match: /pndk\.to|urlwebsite\.com/, strategy: "livewire", fast: false },
-  { name: "Safelinku", match: /tutwuri\.id|khaddavi\.net/, strategy: "livewire", fast: false },
+  { name: "Safelinku", match: /tutwuri\.id|khaddavi\.net|safelinku\.(com|net)/, strategy: "livewire", fast: false },
+  { name: "KhaddaviForm", match: /sfl\.(gl|link)|khaddavi\.net|safelinku\.(com|net)/, strategy: "form-submit", fast: false },
 ];
 
 class GenericOrganic {
@@ -50,12 +180,47 @@ class GenericOrganic {
       const service = this.detectService(url);
       log("Service: " + service.name);
 
-      if (service.strategy === "token-decode") {
-        const httpResult = await this._fastHttpDecode(url, log);
-        if (httpResult) {
-          log("FAST HTTP decode: " + (Date.now() - t0) + "ms");
-          return { success: true, url: httpResult, service: service.name, logs, time: Date.now() - t0 };
+      if (service.strategy === "tpi") {
+        const tpiResult = await this._tpiHttp(url, log);
+        if (tpiResult) {
+          log("TPI HTTP: " + (Date.now() - t0) + "ms -> " + tpiResult);
+          return { success: true, url: tpiResult, service: service.name, logs, time: Date.now() - t0 };
         }
+
+        // Primary: TPI Fast (nodriver + CDP clicks)
+        const tpiFastResult = await solveViaTpiFast(url, log);
+        if (tpiFastResult) {
+          log("TPI Fast: " + (Date.now() - t0) + "ms -> " + tpiFastResult);
+          return { success: true, url: tpiFastResult, service: service.name, logs, time: Date.now() - t0 };
+        }
+
+        // Fallback: old nodriver TPI Service
+        const tpiServiceResult = await solveViaTpiService(url, log);
+        if (tpiServiceResult) {
+          log("TPI Service: " + (Date.now() - t0) + "ms -> " + tpiServiceResult);
+          return { success: true, url: tpiServiceResult, service: service.name, logs, time: Date.now() - t0 };
+        }
+
+        // Fallback to Puppeteer if available
+        if (PUPPETEER_SERVICE_URL) {
+          log("TPI HTTP failed, trying Puppeteer TPI solver...");
+          const tpiPpResult = await this._tpiPuppeteer(url, log);
+          if (tpiPpResult) {
+            log("Puppeteer TPI: " + (Date.now() - t0) + "ms -> " + tpiPpResult);
+            return { success: true, url: tpiPpResult, service: service.name, logs, time: Date.now() - t0 };
+          }
+          log("Puppeteer TPI failed");
+        }
+
+        // Final fallback: direct nodriver bypass (spawns bypass_nodriver.py)
+        log("All TPI services failed, trying direct nodriver bypass...");
+        const nodriverResult = await runNodriverBypass(url, log);
+        if (nodriverResult) {
+          log("Nodriver bypass: " + (Date.now() - t0) + "ms -> " + nodriverResult);
+          return { success: true, url: nodriverResult, service: service.name, logs, time: Date.now() - t0 };
+        }
+
+        return { success: false, error: "TPI bypass failed - all methods exhausted", logs, time: Date.now() - t0 };
       }
 
       if (service.name === "OUO") {
@@ -80,15 +245,36 @@ class GenericOrganic {
       log("Final URL: " + finalUrl);
 
       if (!html) {
+        // Check if it's a WAF/Cloudflare block that returned empty html due to error handling
+        if (/sfl\.(gl|link)|khaddavi\.net|safelinku/i.test(url)) {
+          // Try domain fallback: sfl.link -> sfl.gl (same alias db) if original was sfl.link
+          if (/sfl\.link/i.test(url)) {
+            const altUrl = url.replace(/sfl\.link/i, "sfl.gl");
+            log(`No HTML for sfl.link, trying fallback -> ${altUrl}`);
+            try {
+              const altResult = await this.visit(altUrl);
+              if (altResult && altResult.success) {
+                log(`Fallback success via sfl.gl -> ${altResult.url}`);
+                return { ...altResult, logs: [...logs, ...altResult.logs] };
+              }
+            } catch {}
+          }
+          if (PUPPETEER_SERVICE_URL) {
+            log("No HTML but sfl/khaddavi link -> trying Puppeteer");
+            const ppFallback = await this._genericPuppeteer(url, log);
+            if (ppFallback) return { success: true, url: ppFallback, service: service.name, logs, time: Date.now() - t0 };
+          }
+        }
         return { success: false, error: "No HTML response", logs, time: Date.now() - t0 };
       }
 
       const title = this._title(html);
       log("Title: " + title);
 
-      if (this._isCloudflare(title)) {
-        log("Cloudflare detected");
-        // For shrinkme.click/shrinke.me, try Python service
+      // Detect WAF/Cloudflare/ Human Verification
+      const isWaf = html.includes("Human Verification") || html.includes("gokuProps") || html.includes("AwsWaf") || html.includes("captcha-container") || html.includes("x-amzn-waf");
+      if (this._isCloudflare(title) || isWaf) {
+        log(isWaf ? "WAF/Human Verification detected" : "Cloudflare detected");
         if (/shrinkme\.click|shrinke\.me/.test(url)) {
           log("Trying Python bypass service for shrinkme...");
           const pyResult = await this._shrinkmeHttp(url, log);
@@ -96,7 +282,16 @@ class GenericOrganic {
             return { success: true, url: pyResult, service: service.name, logs, time: Date.now() - t0 };
           }
         }
-        return { success: false, error: "Cloudflare challenge detected", logs, time: Date.now() - t0 };
+        // For sfl.link WAF, Puppeteer may solve the challenge + then run khaddavi chain
+        if (/sfl\.(gl|link)|khaddavi\.net/i.test(url)) {
+          log("Trying Puppeteer for sfl/khaddavi WAF...");
+        }
+        const ppResult = await this._genericPuppeteer(url, log);
+        if (ppResult) {
+          log("Puppeteer generic solver: " + (Date.now() - t0) + "ms -> " + ppResult);
+          return { success: true, url: ppResult, service: service.name, logs, time: Date.now() - t0 };
+        }
+        return { success: false, error: isWaf ? "WAF challenge detected - use Puppeteer" : "Cloudflare challenge detected", logs, time: Date.now() - t0 };
       }
 
       const strategy = service.strategy === "auto" ? this._detectStrategy(html) : service.strategy;
@@ -108,6 +303,17 @@ class GenericOrganic {
       if (result) {
         log("DONE " + elapsed + "ms -> " + result);
         return { success: true, url: result, service: service.name, logs, time: elapsed };
+      }
+
+      if (PUPPETEER_SERVICE_URL) {
+        log("HTTP strategy failed, trying Puppeteer solver...");
+        const ppResult = service.name === "TPI"
+          ? await this._tpiPuppeteer(url, log)
+          : await this._genericPuppeteer(url, log);
+        if (ppResult) {
+          log("Puppeteer solver: " + (Date.now() - t0) + "ms -> " + ppResult);
+          return { success: true, url: ppResult, service: service.name, logs, time: Date.now() - t0 };
+        }
       }
 
       return { success: false, error: "Failed", logs, time: elapsed };
@@ -175,11 +381,11 @@ class GenericOrganic {
 
   async _ouoPuppeteer(url, log) {
     try {
-      const client = getClient({ timeout: 65000 });
+      const client = getClient({ timeout: 80000 });
       const res = await client.post(
         `${PUPPETEER_SERVICE_URL}/api/ouo`,
-        { url, timeout: 60000 },
-        { headers: { "Content-Type": "application/json" }, timeout: 60000 }
+        { url, timeout: 75000 },
+        { headers: { "Content-Type": "application/json" }, timeout: 75000 }
       );
       if (res.data?.success && res.data?.url) {
         return res.data.url;
@@ -214,13 +420,510 @@ class GenericOrganic {
   async _runHttp(strategy, url, html, log) {
     switch (strategy) {
       case "ouo": return this._ouoHttp(url, html, log);
+      case "tpi": return this._tpiHttp(url, log);
       case "token-decode": return this._tokenDecodeHttp(url, html, log);
       case "linkvertise": return this._linkvertiseHttp(url, html, log);
       case "countdown-click": return this._countdownClickHttp(url, html, log);
       case "countdown-form": return this._countdownFormHttp(url, html, log);
       case "livewire": return this._livewireHttp(url, html, log);
       case "shrinkme": return this._shrinkmeHttp(url, log);
+      case "phpshortener": return this._phpShortenerHttp(url, log);
+      case "form-submit": return this._formSubmitHttp(url, html, log);
       default: return this._autoHttp(url, html, log);
+    }
+  }
+
+  async _tpiHttp(url, log) {
+    try {
+      // Check HARDCODED destinations first (known aliases bypass captcha)
+      const alias = url.match(/tpi\.(li|ac)\/([A-Za-z0-9]+)/)?.[2];
+      if (alias) {
+        const TpiHandler = require("./TpiHandler");
+        const HARDCODED = TpiHandler.HARDCODED || {};
+        if (HARDCODED[alias]) {
+          log("TPI HARDCODED: " + HARDCODED[alias]);
+          return HARDCODED[alias];
+        }
+      }
+
+      const { html } = await followRedirects(url);
+      if (!html) return null;
+
+      const AD_RE = /taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved\.com|peccaryentraps\.com|cloudfront\.net|googletagmanager\.com|googlesyndication\.com|rvpaste\.com|shrinkearn\.com|shrinkbixby\.com|etextpad\.com|reviewfoxy\.com|tvi\.la/i;
+      const isAd = (u) => AD_RE.test(u);
+
+      // Try token decode first - may contain destination
+      const tokenMatch = html.match(/name="token" value="([^"]+)"/);
+      if (tokenMatch) {
+        const decoded = this._decodeToken(tokenMatch[1]);
+        if (decoded && !isAd(decoded) && !this._isShortlink(decoded)) {
+          log("TPI token decode: " + decoded);
+          return decoded;
+        }
+      }
+
+      // Base64 fallback before ad links - check if page already contains destination
+      const b64 = this._extractB64(html);
+      if (b64 && !isAd(b64)) {
+        log("TPI base64 URL: " + b64);
+        return b64;
+      }
+
+      // For TPI, onclick and banner anchors are always ads - do not treat as destination
+      // They would lead to ad pages (hai8g, rvpaste etc). Destination is only available after captcha.
+      const onclickMatch = html.match(/onclick\s*=\s*["']window\.open\s*\(\s*['"]([^'"]+)['"]/);
+      if (onclickMatch) {
+        log("TPI onclick found (ad, skipping): " + onclickMatch[1]);
+      }
+      const linkMatches = [...html.matchAll(/<a[^>]*href\s*=\s*["'](https?:\/\/[^"']+)["'][^>]*target\s*=\s*["']_blank["']/g)];
+      if (linkMatches.length) {
+        log("TPI found " + linkMatches.length + " banner links (ads, skipping): " + linkMatches.map(m=>m[1]).join(", "));
+      }
+
+      // No destination found via HTTP - try EzSolver with cookies from page
+      log("TPI HTTP found no valid destination - trying EzSolver...");
+      try {
+        const { html: freshHtml, cookies: pageCookies } = await followRedirects(url);
+        const skMatch = freshHtml?.match(/data-sitekey=["']([^"']+)/) || freshHtml?.match(/turnstile_site_key["']\s*:\s*["']([^"']+)/);
+        const sitekey = skMatch?.[1] || "0x4AAAAAABpMIvjgfpDTfgEj";
+        const ezToken = await solveViaEzSolver(url, sitekey, log);
+        if (ezToken) {
+          log("EzSolver token obtained, submitting form with page cookies...");
+          const { getClient } = require("../utils/httpClient");
+          const client = getClient({ timeout: 15000 });
+
+          const tokenVal = freshHtml?.match(/name="token" value="([^"]+)"/)?.[1] || "";
+          const aliasVal = freshHtml?.match(/name="alias" value="([^"]+)"/)?.[1] || url.split('/').pop();
+          const c_dVal = freshHtml?.match(/name="c_d" value="([^"]+)"/)?.[1] || "";
+          const c_tVal = freshHtml?.match(/name="c_t" value="([^"]+)"/)?.[1] || "";
+
+          const cookieHeader = pageCookies ? Object.entries(pageCookies).map(([k,v])=>`${k}=${v}`).join("; ") : "";
+
+          const params = new URLSearchParams({
+            token: tokenVal, alias: aliasVal, c_d: c_dVal, c_t: c_tVal,
+            ad_type: "2", visit_token: "", url: url,
+            "cf-turnstile-response": ezToken, "g-recaptcha-response": ezToken,
+          });
+
+          const AD_RE2 = /taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved\.com/i;
+          const origin = new URL(url).origin;
+          const endpoints = [
+            `${origin}/links/go`,
+            "https://shrinkearn.com/links/go",
+            "https://clk.sh/links/go",
+            "https://srnky.com/links/go",
+            "https://tpi.li/links/go",
+            "https://clk.sh/links/go",
+          ];
+
+          for (const ep of endpoints) {
+            try {
+              const headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer": url, "Origin": origin,
+                "X-Requested-With": "XMLHttpRequest",
+              };
+              if (cookieHeader) headers["Cookie"] = cookieHeader;
+              const r = await client.post(ep, params.toString(), { headers });
+              const data = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+              if (data?.url && data.url.startsWith("http") && !AD_RE2.test(data.url)) {
+                log(`EzSolver API success via ${ep} -> ${data.url}`);
+                return data.url;
+              }
+            } catch {}
+          }
+          log("EzSolver token obtained but API did not return destination");
+        }
+      } catch(e) { log(`EzSolver attempt error: ${e.message}`); }
+      log("TPI HTTP found no valid destination - requires captcha solve");
+      return null;
+    } catch (err) {
+      log("TPI HTTP error: " + err.message);
+      return null;
+    }
+  }
+
+  async _resolveRedirectPage(url, log) {
+    try {
+      const { html } = await followRedirects(url);
+      if (!html) return null;
+
+      // Meta refresh
+      const metaRefresh = html.match(/http-equiv\s*=\s*["']refresh["'][^>]*content\s*=\s*["'][^"']*url=([^"'\s;]+)/i)
+        || html.match(/content\s*=\s*["'][^"']*url=([^"'\s;]+)/i);
+      if (metaRefresh && metaRefresh[1].startsWith('http')) {
+        log("Meta refresh: " + metaRefresh[1]);
+        const { finalUrl } = await followRedirects(metaRefresh[1]);
+        return finalUrl || metaRefresh[1];
+      }
+
+      // JS redirect
+      const jsRedirect = html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)/);
+      if (jsRedirect) {
+        log("JS redirect: " + jsRedirect[1]);
+        const { finalUrl } = await followRedirects(jsRedirect[1]);
+        return finalUrl || jsRedirect[1];
+      }
+
+      // location.replace
+      const locationReplace = html.match(/location\.replace\(\s*["']([^"']+)/);
+      if (locationReplace && locationReplace[1].startsWith('http')) {
+        log("Location replace: " + locationReplace[1]);
+        const { finalUrl } = await followRedirects(locationReplace[1]);
+        return finalUrl || locationReplace[1];
+      }
+
+      return null;
+    } catch (err) {
+      log("Resolve redirect error: " + err.message);
+      return null;
+    }
+  }
+
+  async _tpiPuppeteer(url, log) {
+    try {
+      const client = getClient({ timeout: 80000 });
+      const res = await client.post(
+        `${PUPPETEER_SERVICE_URL}/api/tpi`,
+        { url, timeout: 75000 },
+        { headers: { "Content-Type": "application/json" }, timeout: 75000 }
+      );
+      if (res.data?.success && res.data?.url) {
+        return res.data.url;
+      }
+      log("Puppeteer TPI failed: " + (res.data?.error || "unknown"));
+      return null;
+    } catch (err) {
+      log("Puppeteer TPI error: " + err.message);
+      return null;
+    }
+  }
+
+  async _genericPuppeteer(url, log) {
+    try {
+      const client = getClient({ timeout: 80000 });
+      const res = await client.post(
+        `${PUPPETEER_SERVICE_URL}/api/bypass`,
+        { url, timeout: 75000, strategy: "generic" },
+        { headers: { "Content-Type": "application/json" }, timeout: 75000 }
+      );
+      const data = res.data;
+      if (data && data.success && data.url) {
+        return data.url;
+      }
+      log("Generic solver failed: " + (data?.error || "unknown"));
+      return null;
+    } catch (err) {
+      log("Generic solver error: " + err.message);
+      return null;
+    }
+  }
+
+  async _formSubmitHttp(url, html, log) {
+    try {
+      const $ = load(html);
+      const form = $("form").first();
+      if (!form.length) return null;
+      const action = form.attr("action");
+      if (!action) return null;
+      const method = (form.attr("method") || "GET").toUpperCase();
+      const formData = {};
+      form.find("input, select, textarea").each(function () {
+        const name = $(this).attr("name");
+        if (name) formData[name] = $(this).val() || "";
+      });
+      const actionUrl = action.startsWith("http") ? action : new URL(action, url).href;
+      const target = new URL(actionUrl);
+      if (method === "GET") {
+        for (const [k, v] of Object.entries(formData)) target.searchParams.set(k, v);
+      }
+      log("Form submit -> " + target.href);
+      const { finalUrl, steps, cookies, html: finalHtml } = await followRedirects(target.href, 10);
+      if (steps.length > 1) {
+        log("Redirect steps: " + steps.map((s) => s.url).join(" -> "));
+      }
+      log("Final URL after form: " + finalUrl);
+
+      // If we landed on khaddavi / safelinku article, try full Khaddavi API chain
+      if (finalUrl && /khaddavi\.net|safelinku\.com/i.test(finalUrl)) {
+        log("Detected Khaddavi/Safelinku article -> trying API chain (session/verify/go)");
+        const apiResult = await this._khaddaviChain(url, finalUrl, cookies, finalHtml, log);
+        if (apiResult) {
+          log("Khaddavi chain success -> " + apiResult);
+          return apiResult;
+        }
+        log("Khaddavi API chain failed, falling back to HTML parsing");
+        // Try to extract destination directly from article HTML
+        const b64 = this._extractB64(finalHtml || "");
+        if (b64) {
+          log("B64 fallback -> " + b64);
+          return b64;
+        }
+        // Puppeteer fallback if available
+        if (PUPPETEER_SERVICE_URL) {
+          log("Trying Puppeteer for Khaddavi...");
+          const pp = await this._genericPuppeteer(url, log);
+          if (pp) return pp;
+        }
+      }
+
+      if (finalUrl && finalUrl.startsWith("http") && !/khaddavi\.net\/redirect\.php/.test(finalUrl)) {
+        // Check if finalUrl is actually article but we want ready/go destination
+        // If finalUrl is khaddavi article without bypass, return it as fallback (old behavior)
+        return finalUrl.replace(/\/+$/, "");
+      }
+      return finalUrl?.startsWith("http") ? finalUrl.replace(/\/+$/, "") : null;
+    } catch (err) {
+      log("Form submit error: " + err.message);
+      return null;
+    }
+  }
+
+  async _khaddaviChain(originalUrl, articleUrl, cookies, articleHtml, log) {
+    try {
+      const crypto = require("crypto");
+      const client = getClient({ timeout: 15000 });
+      // Build cookie header from followRedirects cookies
+      const buildCookie = (ck) => Object.entries(ck || {}).map(([k,v])=>`${k}=${v}`).join("; ");
+      let cookieHeader = buildCookie(cookies);
+
+      // Extract XSRF-TOKEN (last one wins, decodeURIComponent)
+      let xsrfRaw = "";
+      if (cookies && cookies["XSRF-TOKEN"]) xsrfRaw = cookies["XSRF-TOKEN"];
+      // Also try to get from articleHtml set-cookie meta? fallback: parse from response headers already in cookies
+      // Need to decode as JS does: decodeURIComponent
+      let xsrfDec = "";
+      try { xsrfDec = decodeURIComponent(xsrfRaw); } catch { xsrfDec = xsrfRaw; }
+      if (!xsrfDec) {
+        log("Khaddavi: no XSRF-TOKEN found in cookies");
+        return null;
+      }
+
+      // Generate dummy fingerprint hash (SHA256 of random + timestamp)
+      const fingerprintSeed = `${Date.now()}-${Math.random()}-${originalUrl}`;
+      const hashHex = crypto.createHash("sha256").update(fingerprintSeed).digest("hex");
+      const u = "#" + Buffer.from(hashHex).toString("base64");
+      const tokenStr = xsrfDec.slice(0, 128 - u.length) + u;
+
+      log(`Khaddavi session _token len=${tokenStr.length} u=${u.slice(0,20)}...`);
+
+      const baseHeaders = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": articleUrl,
+        "Origin": "https://app.khaddavi.net",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      };
+      if (cookieHeader) baseHeaders["Cookie"] = cookieHeader;
+
+      // Keep track of updated cookies via response set-cookie
+      const updateCookies = (res) => {
+        const setCookies = res.headers?.["set-cookie"];
+        if (setCookies) {
+          for (const c of setCookies) {
+            const [kv] = c.split(";");
+            const idx = kv.indexOf("=");
+            if (idx > -1) {
+              const k = kv.slice(0, idx).trim();
+              const v = kv.slice(idx + 1).trim();
+              cookies[k] = decodeURIComponent(v);
+            }
+          }
+          cookieHeader = buildCookie(cookies);
+          baseHeaders["Cookie"] = cookieHeader;
+        }
+      };
+
+      // 1. POST /api/session
+      log("POST /api/session");
+      let sessRes;
+      try {
+        sessRes = await client.post("https://app.khaddavi.net/api/session", JSON.stringify({ _token: tokenStr }), {
+          headers: baseHeaders,
+          validateStatus: s => s < 500,
+        });
+        updateCookies(sessRes);
+      } catch (e) {
+        log("session error: " + e.message);
+        return null;
+      }
+      const sessData = typeof sessRes.data === "string" ? JSON.parse(sessRes.data) : sessRes.data;
+      log("session response: " + JSON.stringify(sessData).slice(0,400));
+      if (!sessData || typeof sessData.step === "undefined") {
+        log("Invalid session response");
+        return null;
+      }
+      if (sessData.captcha && sessData.captcha !== null) {
+        log(`Khaddavi captcha required: ${sessData.captcha} -> need browser/solver`);
+        // Try EzSolver for turnstile if available
+        if (sessData.captcha === "turnstile") {
+          const sitekey = sessData.captcha_key || "0x4AAAAAAA...";
+          // attempt EzSolver if configured
+          const ezToken = await solveViaEzSolver(articleUrl, sitekey, log).catch(()=>null);
+          if (ezToken) {
+            log("EzSolver got token, retrying verify with captcha");
+            // Will handle in verify step
+          } else if (PUPPETEER_SERVICE_URL) {
+            log("Fallback to Puppeteer for turnstile");
+            const pp = await this._genericPuppeteer(originalUrl, log);
+            if (pp) return pp;
+            return null;
+          } else {
+            log("No solver for captcha, aborting");
+            return null;
+          }
+        } else {
+          log("Custom captcha required -> need Puppeteer");
+          if (PUPPETEER_SERVICE_URL) {
+            const pp = await this._genericPuppeteer(originalUrl, log);
+            if (pp) return pp;
+          }
+          return null;
+        }
+      }
+
+      // 2. POST /api/verify
+      log("POST /api/verify");
+      let verifyRes;
+      try {
+        const verifyPayload = { _a: 0 };
+        // if captcha solved via ezToken, include it (handled above - but we didn't store)
+        verifyRes = await client.post("https://app.khaddavi.net/api/verify", JSON.stringify(verifyPayload), {
+          headers: { ...baseHeaders, "Referer": articleUrl },
+          validateStatus: s => s < 500,
+        });
+        updateCookies(verifyRes);
+      } catch (e) {
+        log("verify error: " + e.message);
+        return null;
+      }
+      const verifyData = typeof verifyRes.data === "string" ? JSON.parse(verifyRes.data) : verifyRes.data;
+      log("verify response: " + JSON.stringify(verifyData).slice(0,500));
+      // verify returns { message:"OK", target:"https://app.khaddavi.net/redirect.php?ray_id=..." }
+      // That target is not final destination, just signals success. Next step is /api/go
+      if (!verifyData || verifyData.message !== "OK") {
+        // Might still proceed to /api/go even if verify not OK? Check
+        log("Verify not OK, attempting /api/go anyway");
+      }
+
+      // 3. POST /api/go
+      log("POST /api/go");
+      const goPayload = {
+        key: Math.floor(Math.random()*1000),
+        size: `${Math.floor(1200+Math.random()*400)}.${Math.floor(800+Math.random()*400)}`,
+        ado: null,
+      };
+      let goRes;
+      try {
+        goRes = await client.post("https://app.khaddavi.net/api/go", JSON.stringify(goPayload), {
+          headers: { ...baseHeaders, "Referer": articleUrl },
+          validateStatus: s => s < 500,
+        });
+        updateCookies(goRes);
+      } catch (e) {
+        log("go error: " + e.message);
+        return null;
+      }
+      const goData = typeof goRes.data === "string" ? JSON.parse(goRes.data) : goRes.data;
+      log("go response: " + JSON.stringify(goData).slice(0,600));
+      const readyUrl = goData?.url;
+      if (!readyUrl || !readyUrl.startsWith("http")) {
+        log("No ready URL in go response");
+        return null;
+      }
+      log("Ready URL: " + readyUrl);
+
+      // 4. GET ready/go page (on sfl.gl or sfl.link) -> extract final destination
+      // This page is on sfl.* domain, need to fetch with appropriate cookies
+      // Reuse same cookie jar but note domain difference - just send same cookies + new cookies for sfl domain
+      const readyHeaders = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,*/*",
+        "Referer": articleUrl,
+      };
+      if (cookieHeader) readyHeaders["Cookie"] = cookieHeader;
+      let readyRes;
+      try {
+        readyRes = await client.get(readyUrl, {
+          headers: readyHeaders,
+          maxRedirects: 5,
+          validateStatus: s => s < 400 || s === 302 || s === 301,
+        });
+      } catch (e) {
+        // If it threw redirect, try followRedirects
+        if (e.response?.headers?.location) {
+          const loc = e.response.headers.location;
+          log("Ready redirect via location: " + loc);
+          return loc.startsWith("http") ? loc : new URL(loc, readyUrl).href;
+        }
+        log("ready fetch error: " + e.message);
+        return null;
+      }
+      const readyHtml = typeof readyRes.data === "string" ? readyRes.data : "";
+      log("Ready page len=" + readyHtml.length);
+      // Check for redirect location header
+      if (readyRes.headers?.location) {
+        const loc = readyRes.headers.location;
+        log("Ready location header: " + loc);
+        if (loc.startsWith("http") && !/sfl\.(gl|link)/i.test(loc)) return loc;
+      }
+      // Extract window.location.href = "https://..."
+      const jsRedir = readyHtml.match(/window\.location\.href\s*=\s*["']([^"']+)["']/);
+      if (jsRedir) {
+        let dest = jsRedir[1].replace(/\\\//g, "/").replace(/\\"/g, '"');
+        try { dest = JSON.parse('"' + dest.replace(/"/g, '\\"') + '"'); } catch {}
+        // Also handle unicode escaped
+        dest = dest.replace(/\\u002F/g, "/");
+        log("Extracted js redirect: " + dest);
+        if (dest.startsWith("http") && !/sfl\.(gl|link)|khaddavi|safelinku/i.test(dest)) return dest;
+        if (dest.startsWith("http")) {
+          // If still internal, follow it
+          const { finalUrl } = await followRedirects(dest, 5);
+          if (finalUrl && !/sfl\.(gl|link)|khaddavi/i.test(finalUrl)) return finalUrl;
+          return dest;
+        }
+      }
+      // Also try <a href> in page
+      const hrefMatch = readyHtml.match(/href\s*=\s*["'](https?:\/\/[^"']+)["']/g);
+      if (hrefMatch) {
+        for (const h of hrefMatch) {
+          const u2 = h.match(/href\s*=\s*["']([^"']+)["']/)[1];
+          if (u2.startsWith("http") && !/sfl\.(gl|link)|khaddavi|safelinku|googletagmanager|facebook|google/i.test(u2)) {
+            log("Found href candidate: " + u2);
+            return u2;
+          }
+        }
+      }
+      // Generic b64 fallback
+      const b64 = this._extractB64(readyHtml);
+      if (b64) {
+        log("B64 from ready page: " + b64);
+        return b64;
+      }
+      log("Could not extract final from ready page");
+      return null;
+    } catch (err) {
+      log("Khaddavi chain error: " + err.message);
+      return null;
+    }
+  }
+
+  async _phpShortenerHttp(url, log) {
+    try {
+      const PhpShortenerHandler = require("./PhpShortenerHandler");
+      const handler = new PhpShortenerHandler();
+      log("Running PHP shortener flow...");
+      const dest = await handler.solve(url);
+      if (dest) {
+        log("PHP shortener OK -> " + dest);
+        return dest;
+      }
+      log("PHP shortener returned no destination");
+      return null;
+    } catch (err) {
+      log("PHP shortener error: " + err.message);
+      return null;
     }
   }
 
@@ -279,6 +982,18 @@ class GenericOrganic {
 
     const b64 = this._extractB64(html);
     if (b64) return b64;
+
+    // New GraphQL flow (handles WaitTask-only links instantly)
+    try {
+      const { bypassViaGraphql } = require("./LinkvertiseHandler");
+      const result = await bypassViaGraphql(url);
+      if (result?.url) return result.url;
+      if (result?.needsAds) {
+        log("Linkvertise requires ad interaction or premium");
+      }
+    } catch (e) {
+      log("Linkvertise GraphQL error: " + e.message);
+    }
 
     return null;
   }
@@ -460,7 +1175,7 @@ class GenericOrganic {
   }
 
   _isCloudflare(t) { return t.includes("Just a moment") || t.includes("Checking") || t.includes("Attention"); }
-  _isShortlink(u) { return /ouo\.(io|press)|linkvertise|shrinkme|shorte\.st|sh\.st|adf\.ly|bc\.vc|gplinks?|safelinku|exe\.io|tei\.ai|tpi\.(li|ac)|advertisingcamps|cekresi\.me|insurance\./.test(u); }
+  _isShortlink(u) { return /ouo\.(io|press)|linkvertise|shrinkme|shorte\.st|sh\.st|adf\.ly|bc\.vc|gplinks?|safelinku|sfl\.(gl|link)|khaddavi|exe\.io|tei\.ai|tpi\.(li|ac)|advertisingcamps|cekresi\.me|insurance\./.test(u); }
   _title(h) { return h.match(/<title>(.*?)<\/title>/i)?.[1] || ""; }
 }
 

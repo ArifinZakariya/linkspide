@@ -1,0 +1,52 @@
+================================================
+LINK TES SATU-PERSATU (Web: http://localhost:5000)
+TrobosLink - AI Link Bypass
+================================================
+
+Berikut link contoh per layanan. Yang ditandai (SUDAH DIUJI) =
+sudah diverifikasi jalan di server. Yang lain = contoh format
+(jika link sudah mati, cari link baru dengan domain yg sama).
+
+------------------------------------------------
+1) OUO .........................  sudah diuji
+   https://ouo.io/Gw82e2b          -> nirmal-ten.vercel.app
+
+2) Zovo ........................  sudah diuji
+   https://go.zovo.ink/1Jn2p9N     -> swiftuploads.com
+
+3) Vuotlink / Oklink ...........  contoh format
+   https://vuotlink.xyz/<kode>
+   https://oklink2.online/<kode>
+
+4) Linkvertise .................  sudah diuji (WaitTask)
+   https://linkvertise.com/<kode>
+   https://link-target.net/<kode>
+
+5) ShrinkMe ....................  contoh format
+   https://shrinkme.io/<kode>
+   https://shrinke.me/<kode>
+
+6) Facebook l.php ..............  contoh format
+   https://l.facebook.com/l.php?u=<url-encoded>
+
+7) sfl.gl / sfl.link ...........  sudah diuji (full bypass)
+   https://sfl.gl/A0krqT           -> https://www.mediafire.com/file/4ot2v3h7nh3qbk5/MovieBox_PREMIUM_V4.0.01.0813.02.apk/file (via khaddavi chain: session/verify/go/ready)
+   https://sfl.link/A0krqT         -> sama (fallback sfl.gl + WAF handling)
+
+8) droplink.co .................  sudah diuji
+   https://droplink.co/uvpm1wAC    -> tech8s.net
+
+9) Shortener lain (gplinks, exe.io, tpi.li, adf.ly, dl-protect, dst)
+   https://gplinks.com/<kode>
+   https://exe.io/<kode>
+   https://tpi.li/<kode>
+   https://adf.ly/<kode>
+
+10) TeraBox (tab Link Streaming)  contoh format
+    https://www.terabox.com/sharing/link?surl=<kode>
+    (butuh TERABOX_COOKIE utk stream langsung)
+
+================================================
+Catatan:
+- Link anti-bot (linksloot.net, anonlink.io) tidak bisa di-bypass otomatis.
+- Kode shortener tidak bisa dibuat sendiri - ambil dari postingan/link asli.
