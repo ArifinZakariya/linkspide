@@ -94,7 +94,7 @@ function runNodriverBypass(url, log) {
   return new Promise((resolve) => {
     log(`Running nodriver bypass for ${url}...`);
     const proc = spawn("python", [script, url], {
-      timeout: 160000,
+      timeout: 15000,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
