@@ -100,7 +100,32 @@
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
           </div>
-          <div class="progress-steps" id="progressSteps"></div>
+          <div class="bypass-phases" id="bypassPhases">
+            <div class="phase" data-phase="detect">
+              <div class="phase-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+              <span>Detect</span>
+            </div>
+            <div class="phase-line"></div>
+            <div class="phase" data-phase="fetch">
+              <div class="phase-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+              <span>Fetch</span>
+            </div>
+            <div class="phase-line"></div>
+            <div class="phase" data-phase="analyze">
+              <div class="phase-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
+              <span>Analyze</span>
+            </div>
+            <div class="phase-line"></div>
+            <div class="phase" data-phase="bypass">
+              <div class="phase-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <span>Bypass</span>
+            </div>
+            <div class="phase-line"></div>
+            <div class="phase" data-phase="done">
+              <div class="phase-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></div>
+              <span>Done</span>
+            </div>
+          </div>
         </div>
 
         <div class="results-grid">
@@ -119,13 +144,26 @@
             <div class="result-tags" id="resultTags"></div>
           </div>
 
-          <div id="logs" class="logs-card hidden">
-            <div class="logs-header">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-              <span>Proses Bypass</span>
-              <span class="logs-time" id="logsTime"></span>
+          <div id="logs" class="terminal-card hidden">
+            <div class="terminal-header">
+              <div class="terminal-dots">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-yellow"></span>
+                <span class="dot dot-green"></span>
+              </div>
+              <span class="terminal-title" id="terminalTitle">bypass@troboslink:~</span>
+              <span class="terminal-timer" id="terminalTimer">0.0s</span>
             </div>
-            <div class="logs-body" id="logSteps"></div>
+            <div class="terminal-body" id="logSteps">
+              <div class="terminal-cursor"></div>
+            </div>
+            <div class="terminal-footer">
+              <span class="terminal-badge" id="terminalBadge">
+                <span class="badge-pulse"></span>
+                <span id="terminalBadgeText">Processing...</span>
+              </span>
+              <span class="terminal-service" id="terminalService"></span>
+            </div>
           </div>
         </div>
       </section>

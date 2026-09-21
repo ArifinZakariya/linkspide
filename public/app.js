@@ -1,4 +1,6 @@
 let resultUrl = null;
+let _logTimer = null;
+let _logT0 = 0;
 
 const API_BASE = window.API_BASE || "";
 
@@ -12,25 +14,103 @@ function setStatus(msg, type = "") {
   s.className = "status " + type;
 }
 
-function appendLog(msg) {
-  const log = el("logSteps");
-  const d = document.createElement("div");
-  d.className = "log-entry";
-  d.innerHTML = '<span class="log-dot"></span><span class="log-msg">' + msg + '</span>';
-  log.appendChild(d);
-  log.scrollTop = log.scrollHeight;
+function _logTimestamp() {
+  const s = ((Date.now() - _logT0) / 1000).toFixed(1);
+  return s + "s";
 }
 
-function addStep(text, state = "active") {
-  const c = el("progressSteps");
-  const d = document.createElement("div");
-  d.className = "progress-step " + state;
-  d.innerHTML = (state === "done" ? "&#10003;" : state === "err" ? "&#10007;" : "&#9679;") + " " + text;
-  c.appendChild(d);
+function appendLog(msg, cls = "") {
+  const body = el("logSteps");
+  const cursor = body.querySelector(".terminal-cursor");
+  const line = document.createElement("div");
+  line.className = "log-line" + (cls ? " " + cls : "");
+  line.innerHTML =
+    '<span class="log-time">' + _logTimestamp() + '</span>' +
+    '<span class="log-prefix">▸</span>' +
+    '<span class="log-text ' + cls + '">' + msg + '</span>';
+  body.insertBefore(line, cursor);
+  body.scrollTop = body.scrollHeight;
+}
+
+function appendLogLoading(msg) {
+  const body = el("logSteps");
+  const cursor = body.querySelector(".terminal-cursor");
+  const line = document.createElement("div");
+  line.className = "log-line loading";
+  line.innerHTML =
+    '<span class="log-time">' + _logTimestamp() + '</span>' +
+    '<span class="log-prefix">⟳</span>' +
+    '<span class="log-text info">' + msg + '</span>';
+  body.insertBefore(line, cursor);
+  body.scrollTop = body.scrollHeight;
+  return line;
+}
+
+function finishLogLine(line, msg, cls) {
+  if (!line) return;
+  line.classList.remove("loading");
+  const prefix = cls === "success" ? "✔" : cls === "error" ? "✘" : "▸";
+  line.querySelector(".log-prefix").textContent = prefix;
+  const textEl = line.querySelector(".log-text");
+  textEl.textContent = msg;
+  textEl.className = "log-text " + cls;
+}
+
+function setPhase(phase) {
+  document.querySelectorAll(".phase").forEach(p => {
+    p.classList.remove("active", "done");
+  });
+  const phases = ["detect", "fetch", "analyze", "bypass", "done"];
+  const idx = phases.indexOf(phase);
+  phases.forEach((p, i) => {
+    const el = document.querySelector('.phase[data-phase="' + p + '"]');
+    if (!el) return;
+    if (i < idx) el.classList.add("done");
+    else if (i === idx) el.classList.add("active");
+  });
+  document.querySelectorAll(".phase-line").forEach((line, i) => {
+    line.classList.toggle("done", i < idx);
+  });
 }
 
 function setProgress(pct) {
   el("progressFill").style.width = pct + "%";
+}
+
+function startTimer() {
+  _logT0 = Date.now();
+  el("terminalTimer").textContent = "0.0s";
+  _logTimer = setInterval(() => {
+    const s = ((Date.now() - _logT0) / 1000).toFixed(1);
+    el("terminalTimer").textContent = s + "s";
+  }, 100);
+}
+
+function stopTimer() {
+  if (_logTimer) clearInterval(_logTimer);
+  _logTimer = null;
+}
+
+function setTerminalState(state) {
+  const card = el("logs");
+  card.classList.remove("active", "success", "error");
+  if (state) card.classList.add(state);
+  const badge = el("terminalBadge");
+  const pulse = badge.querySelector(".badge-pulse");
+  const text = el("terminalBadgeText");
+  pulse.className = "badge-pulse";
+  if (state === "success") {
+    pulse.classList.add("done");
+    text.textContent = "Done";
+    text.style.color = "var(--green)";
+  } else if (state === "error") {
+    pulse.classList.add("err");
+    text.textContent = "Failed";
+    text.style.color = "var(--red)";
+  } else {
+    text.textContent = "Processing...";
+    text.style.color = "";
+  }
 }
 
 function showResult(url) {
@@ -38,8 +118,7 @@ function showResult(url) {
   el("finalUrl").textContent = url;
   el("resultTags").innerHTML =
     '<span class="tag tag-service">' + el("detectedName").textContent + '</span>' +
-    '<span class="tag tag-speed">organic</span>' +
-    '<span class="tag tag-steps">' + el("progressSteps").children.length + ' steps</span>';
+    '<span class="tag tag-speed">organic</span>';
   show("result");
 }
 
@@ -66,14 +145,18 @@ async function resolve() {
   const btn = el("resolveBtn");
   btn.disabled = true;
   btn.querySelector(".btn-text").textContent = "Bypassing...";
-  hide("result"); hide("logs");
+  hide("result");
   show("progress");
-  el("progressSteps").innerHTML = "";
+  show("logs");
+  el("logSteps").innerHTML = '<div class="terminal-cursor"></div>';
   setProgress(0);
+  setPhase("detect");
+  setTerminalState(null);
+  el("terminalService").textContent = "";
+  el("terminalTitle").textContent = "bypass@troboslink:~";
+  startTimer();
 
-  setStatus("Mendeteksi service...", "loading");
-  addStep("Deteksi URL");
-  setProgress(10);
+  appendLog("Initializing bypass engine...", "info");
 
   try {
     const r = await fetch(API_BASE + "/api/check", {
@@ -84,48 +167,82 @@ async function resolve() {
     const d = await r.json();
     if (!d.valid) throw new Error("URL tidak valid");
     el("detectedName").textContent = d.service;
+    el("terminalService").textContent = d.service;
     show("detectedBadge");
+    appendLog("Service detected: <b>" + d.service + "</b>", "success");
     setProgress(20);
   } catch(e) {
+    setPhase("done");
+    setTerminalState("error");
     setStatus(e.message, "error");
+    appendLog(e.message, "error");
+    stopTimer();
     btn.disabled = false;
     btn.querySelector(".btn-text").textContent = "Bypass";
     return;
   }
 
-  show("logs");
-  el("logSteps").innerHTML = "";
-  const t0 = Date.now();
-
-  appendLog("Mode: ORGANIC");
+  setPhase("fetch");
+  appendLog("Fetching page content...", "info");
   setProgress(30);
 
   try {
+    setPhase("analyze");
+    appendLog("Analyzing link structure...", "info");
+    setProgress(40);
+
     const res = await fetch(API_BASE + "/api/organic", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({url})
     });
+
+    setPhase("bypass");
+    setProgress(50);
+
     const data = await res.json();
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    el("logsTime").textContent = elapsed + "s";
+    const elapsed = ((Date.now() - _logT0) / 1000).toFixed(1);
+    stopTimer();
+    el("terminalTimer").textContent = elapsed + "s";
+
+    if (data.logs) {
+      data.logs.forEach((logMsg, i) => {
+        setTimeout(() => {
+          const cls = logMsg.includes("success") ? "success" :
+                     logMsg.includes("error") || logMsg.includes("failed") ? "error" :
+                     logMsg.includes("HARDCODED") ? "success bold" :
+                     logMsg.includes("trying") || logMsg.includes("Trying") ? "info" :
+                     logMsg.includes("detected") || logMsg.includes("Found") ? "warn" :
+                     logMsg.includes("http") ? "url" : "";
+          appendLog(logMsg, cls);
+        }, i * 60);
+      });
+    }
+
+    await new Promise(r => setTimeout(r, data.logs ? data.logs.length * 60 + 200 : 300));
 
     if (data.success) {
+      setPhase("done");
       setProgress(100);
-      addStep("Selesai", "done");
+      setTerminalState("success");
+      appendLog("Destination: " + (data.resolved || data.url), "success bold");
+      appendLog("Bypass completed in " + elapsed + "s", "success");
       setStatus("Bypass berhasil! (" + elapsed + "s)", "organic");
       showResult(data.resolved || data.url);
       el("statSpeed").textContent = elapsed + "s";
     } else {
-      setProgress(60);
-      addStep("Gagal", "err");
+      setPhase("done");
+      setProgress(70);
+      setTerminalState("error");
+      appendLog(data.error || "Bypass failed", "error");
       setStatus(data.error || "Gagal memproses", "error");
-      appendLog(data.error || "Unknown error");
     }
   } catch(e) {
+    setPhase("done");
+    setTerminalState("error");
+    stopTimer();
     setStatus("Koneksi error", "error");
-    appendLog(e.message);
-    addStep("Error", "err");
+    appendLog("Connection error: " + e.message, "error");
   } finally {
     btn.disabled = false;
     btn.querySelector(".btn-text").textContent = "Bypass";

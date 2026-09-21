@@ -8,7 +8,7 @@ const router = express.Router();
 
 const API_TIMEOUT = 60000;
 const OUO_TIMEOUT = 90000;
-const TPI_TIMEOUT = 120000;
+const TPI_TIMEOUT = 200000;
 
 function routeTimeout(url) {
   if (/ouo\.(io|press)/.test(url || "")) return OUO_TIMEOUT;

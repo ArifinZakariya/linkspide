@@ -28,11 +28,11 @@ async function solveViaHttpBypass(url, log) {
 
 async function solveViaTpiFast(url, log) {
   try {
-    const client = getClient({ timeout: 160000 });
+    const client = getClient({ timeout: 200000 });
     log(`Trying TPI Fast (nodriver+CDP) -> ${TPI_FAST_URL}/bypass`);
-    const r = await client.post(`${TPI_FAST_URL}/bypass`, { url, timeout: 150 }, {
+    const r = await client.post(`${TPI_FAST_URL}/bypass`, { url, timeout: 180 }, {
       headers: { "Content-Type": "application/json" },
-      timeout: 155000,
+      timeout: 195000,
     });
     if (r.data?.destination && r.data.destination.startsWith("http")) {
       log(`TPI Fast success (${r.data.elapsed}s) -> ${r.data.destination}`);
@@ -350,72 +350,13 @@ class GenericOrganic {
           return { success: true, url: tpiResult, service: service.name, logs, time: Date.now() - t0 };
         }
 
-        // Fast-fail for Turnstile links (like aiUHnm, srnky.com/vguc) to avoid 90s Request timed out
-        // If _tpiHttp returned null and page still has Turnstile, don't try slow browser methods
-        try {
-          const { html: checkHtml } = await followRedirects(url);
-          if (checkHtml && (checkHtml.includes('turnstile') || checkHtml.includes('cf-turnstile') || checkHtml.includes('0x4AAAAAABpMIvjgfpDTfgEj'))) {
-            log("TPI Turnstile still required after HTTP - fast fail (use oii.la/aHsyJ3nU HARDCODED or set solver)");
-            return { success: false, error: "TPI requires Turnstile - link valid but needs solver (try oii.la/aHsyJ3nU 20ms HARDCODED, or set EZSOLVER_URL/PUPPETEER_SERVICE_URL)", logs, time: Date.now() - t0 };
-          }
-        } catch {}
-
-        // Fast path: if on Vercel Hobby (10s) skip slow browser methods to avoid Request timed out
-        const isVercel = !!process.env.VERCEL;
-        const getElapsed = () => Date.now() - t0;
-        if (isVercel && getElapsed() > 8000) {
-          log("Vercel timeout risk, returning fast fail for TPI");
-          return { success: false, error: "TPI requires Turnstile - use local bypass or Pro (30s) with PUPPETEER_SERVICE_URL", logs, time: getElapsed() };
+        const tpiFastResult = await solveViaTpiFast(url, log);
+        if (tpiFastResult) {
+          log("TPI Fast: " + (Date.now() - t0) + "ms -> " + tpiFastResult);
+          return { success: true, url: tpiFastResult, service: service.name, logs, time: Date.now() - t0 };
         }
 
-        // Primary: TPI Fast (nodriver + CDP clicks) - quick fail if service not running (5s)
-        if (!isVercel || getElapsed() < 15000) {
-          const tpiFastResult = await solveViaTpiFast(url, log);
-          if (tpiFastResult) {
-            log("TPI Fast: " + (Date.now() - t0) + "ms -> " + tpiFastResult);
-            return { success: true, url: tpiFastResult, service: service.name, logs, time: Date.now() - t0 };
-          }
-        }
-
-        // Fallback: old nodriver TPI Service
-        if (!isVercel || getElapsed() < 20000) {
-          const tpiServiceResult = await solveViaTpiService(url, log);
-          if (tpiServiceResult) {
-            log("TPI Service: " + (Date.now() - t0) + "ms -> " + tpiServiceResult);
-            return { success: true, url: tpiServiceResult, service: service.name, logs, time: Date.now() - t0 };
-          }
-        }
-
-        // Fallback to Puppeteer if available
-        if (PUPPETEER_SERVICE_URL && getElapsed() < 25000) {
-          log("TPI HTTP failed, trying Puppeteer TPI solver...");
-          const tpiPpResult = await this._tpiPuppeteer(url, log);
-          if (tpiPpResult) {
-            log("Puppeteer TPI: " + (Date.now() - t0) + "ms -> " + tpiPpResult);
-            return { success: true, url: tpiPpResult, service: service.name, logs, time: Date.now() - t0 };
-          }
-          log("Puppeteer TPI failed");
-        }
-
-        // Final fallback: direct nodriver bypass (spawns bypass_nodriver.py) - only if not Vercel or has time
-        if ((!isVercel && getElapsed() < 80000) || (isVercel && getElapsed() < 15000)) {
-          log("All TPI services failed, trying direct nodriver bypass...");
-          const nodriverResult = await runNodriverBypass(url, log);
-          if (nodriverResult) {
-            log("Nodriver bypass: " + (Date.now() - t0) + "ms -> " + nodriverResult);
-            return { success: true, url: nodriverResult, service: service.name, logs, time: Date.now() - t0 };
-          }
-        }
-
-        // Last resort: direct Vercel puppeteer-core (works on Vercel hnd1 and locally if puppeteer-core installed)
-        log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
-        const vercelDirect = await solveViaVercelPuppeteer(url, log, 25000);
-        if (vercelDirect) {
-          log("Vercel direct puppeteer TPI success -> " + vercelDirect);
-          return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
-        }
-
-        return { success: false, error: "TPI bypass failed - all methods exhausted (try different link or set PUPPETEER_SERVICE_URL/EZSOLVER_URL, or check if link is valid/expired)", logs, time: Date.now() - t0 };
+        return { success: false, error: "TPI bypass failed (try different link or check if link is valid/expired)", logs, time: Date.now() - t0 };
       }
 
       if (service.name === "OUO") {
@@ -671,7 +612,6 @@ class GenericOrganic {
 
   async _tpiHttp(url, log) {
     try {
-      // Check HARDCODED destinations first (known aliases bypass captcha) - works for all TPI hosts
       const alias = url.split('/').pop()?.split('?')[0]?.split('#')[0];
       if (alias) {
         const TpiHandler = require("./TpiHandler");
@@ -688,7 +628,6 @@ class GenericOrganic {
       const AD_RE = /taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved\.com|peccaryentraps\.com|cloudfront\.net|googletagmanager\.com|googlesyndication\.com|rvpaste\.com|shrinkearn\.com|shrinkbixby\.com|etextpad\.com|reviewfoxy\.com|tvi\.la/i;
       const isAd = (u) => AD_RE.test(u);
 
-      // Try token decode first - may contain destination
       const tokenMatch = html.match(/name="token" value="([^"]+)"/);
       if (tokenMatch) {
         const decoded = this._decodeToken(tokenMatch[1]);
@@ -698,114 +637,12 @@ class GenericOrganic {
         }
       }
 
-      // Base64 fallback before ad links - check if page already contains destination
       const b64 = this._extractB64(html);
       if (b64 && !isAd(b64)) {
         log("TPI base64 URL: " + b64);
         return b64;
       }
 
-      // For TPI, onclick and banner anchors are always ads - do not treat as destination
-      // They would lead to ad pages (hai8g, rvpaste etc). Destination is only available after captcha.
-      const onclickMatch = html.match(/onclick\s*=\s*["']window\.open\s*\(\s*['"]([^'"]+)['"]/);
-      if (onclickMatch) {
-        log("TPI onclick found (ad, skipping): " + onclickMatch[1]);
-      }
-      const linkMatches = [...html.matchAll(/<a[^>]*href\s*=\s*["'](https?:\/\/[^"']+)["'][^>]*target\s*=\s*["']_blank["']/g)];
-      if (linkMatches.length) {
-        log("TPI found " + linkMatches.length + " banner links (ads, skipping): " + linkMatches.map(m=>m[1]).join(", "));
-      }
-
-      // Try direct POST without Turnstile (fast, works for some TPI links that don't enforce captcha)
-      log("TPI trying direct POST without Turnstile (fast)...");
-      try {
-        const c = getClient({ timeout: 8000 });
-        const alias0 = url.split('/').pop()?.split('?')[0] || "";
-        const html0 = html;
-        const tVal0 = html0.match(/name="token" value="([^"]+)"/)?.[1] || "";
-        const aVal0 = html0.match(/name="alias" value="([^"]+)"/)?.[1] || alias0;
-        const dVal0 = html0.match(/name="c_d" value="([^"]+)"/)?.[1] || "";
-        const ctVal0 = html0.match(/name="c_t" value="([^"]+)"/)?.[1] || "";
-        const p0 = new URLSearchParams({ token: tVal0, alias: aVal0, c_d: dVal0, c_t: ctVal0, ad_type: "2", visit_token: "", url });
-        const o0 = new URL(url).origin;
-        for (const ep of [`${o0}/links/go`, "https://srnky.com/links/go", "https://tpi.li/links/go", "https://oii.la/links/go"]) {
-          try {
-            const rr = await c.post(ep, p0.toString(), { headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: url, Origin: o0, "X-Requested-With": "XMLHttpRequest" }, timeout: 5000 });
-            const jj = typeof rr.data === "string" ? JSON.parse(rr.data) : rr.data;
-            if (jj?.url && jj.url.startsWith("http") && !isAd(jj.url) && !/tpi\.(li|ac)|oii\.la|srnky\.com/i.test(jj.url)) {
-              log(`Direct POST success ${ep} -> ${jj.url}`);
-              return jj.url;
-            }
-          } catch {}
-        }
-        log("Direct POST without token failed");
-      } catch (e) { log("Direct POST error: " + e.message); }
-
-      // Fast-fail for Turnstile links when direct POST failed - avoid 90s timeout
-      const hasTurnstile = html.includes('turnstile') || html.includes('cf-turnstile') || html.includes('0x4AAAAAABpMIvjgfpDTfgEj');
-      if (hasTurnstile) {
-        log("TPI Turnstile detected and direct POST failed - requires solver");
-        // For local/Vercel without solver, return fast instead of 45s EzSolver + 60s browser that will timeout
-        // Let outer visit handle it with fast-fail and helpful error
-        return null;
-      }
-
-      // No destination found via HTTP - try EzSolver with cookies from page (only for non-Turnstile or when direct POST not applicable)
-      log("TPI HTTP found no valid destination - trying EzSolver...");
-      try {
-        const { html: freshHtml, cookies: pageCookies } = await followRedirects(url);
-        const skMatch = freshHtml?.match(/data-sitekey=["']([^"']+)/) || freshHtml?.match(/turnstile_site_key["']\s*:\s*["']([^"']+)/);
-        const sitekey = skMatch?.[1] || "0x4AAAAAABpMIvjgfpDTfgEj";
-        const ezToken = await solveViaEzSolver(url, sitekey, log);
-        if (ezToken) {
-          log("EzSolver token obtained, submitting form with page cookies...");
-          const { getClient } = require("../utils/httpClient");
-          const client = getClient({ timeout: 15000 });
-
-          const tokenVal = freshHtml?.match(/name="token" value="([^"]+)"/)?.[1] || "";
-          const aliasVal = freshHtml?.match(/name="alias" value="([^"]+)"/)?.[1] || url.split('/').pop();
-          const c_dVal = freshHtml?.match(/name="c_d" value="([^"]+)"/)?.[1] || "";
-          const c_tVal = freshHtml?.match(/name="c_t" value="([^"]+)"/)?.[1] || "";
-
-          const cookieHeader = pageCookies ? Object.entries(pageCookies).map(([k,v])=>`${k}=${v}`).join("; ") : "";
-
-          const params = new URLSearchParams({
-            token: tokenVal, alias: aliasVal, c_d: c_dVal, c_t: c_tVal,
-            ad_type: "2", visit_token: "", url: url,
-            "cf-turnstile-response": ezToken, "g-recaptcha-response": ezToken,
-          });
-
-          const AD_RE2 = /taboola\.com|advertisingcamps\.com|hai8g\.com|warlessstarved\.com/i;
-          const origin = new URL(url).origin;
-          const endpoints = [
-            `${origin}/links/go`,
-            "https://shrinkearn.com/links/go",
-            "https://clk.sh/links/go",
-            "https://srnky.com/links/go",
-            "https://tpi.li/links/go",
-            "https://clk.sh/links/go",
-          ];
-
-          for (const ep of endpoints) {
-            try {
-              const headers = {
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Referer": url, "Origin": origin,
-                "X-Requested-With": "XMLHttpRequest",
-              };
-              if (cookieHeader) headers["Cookie"] = cookieHeader;
-              const r = await client.post(ep, params.toString(), { headers });
-              const data = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
-              if (data?.url && data.url.startsWith("http") && !AD_RE2.test(data.url)) {
-                log(`EzSolver API success via ${ep} -> ${data.url}`);
-                return data.url;
-              }
-            } catch {}
-          }
-          log("EzSolver token obtained but API did not return destination");
-        }
-      } catch(e) { log(`EzSolver attempt error: ${e.message}`); }
-      log("TPI HTTP found no valid destination - requires captcha solve");
       return null;
     } catch (err) {
       log("TPI HTTP error: " + err.message);
