@@ -350,6 +350,16 @@ class GenericOrganic {
           return { success: true, url: tpiResult, service: service.name, logs, time: Date.now() - t0 };
         }
 
+        // Fast-fail for Turnstile links (like aiUHnm, srnky.com/vguc) to avoid 90s Request timed out
+        // If _tpiHttp returned null and page still has Turnstile, don't try slow browser methods
+        try {
+          const { html: checkHtml } = await followRedirects(url);
+          if (checkHtml && (checkHtml.includes('turnstile') || checkHtml.includes('cf-turnstile') || checkHtml.includes('0x4AAAAAABpMIvjgfpDTfgEj'))) {
+            log("TPI Turnstile still required after HTTP - fast fail (use oii.la/aHsyJ3nU HARDCODED or set solver)");
+            return { success: false, error: "TPI requires Turnstile - link valid but needs solver (try oii.la/aHsyJ3nU 20ms HARDCODED, or set EZSOLVER_URL/PUPPETEER_SERVICE_URL)", logs, time: Date.now() - t0 };
+          }
+        } catch {}
+
         // Fast path: if on Vercel Hobby (10s) skip slow browser methods to avoid Request timed out
         const isVercel = !!process.env.VERCEL;
         const getElapsed = () => Date.now() - t0;
@@ -401,9 +411,8 @@ class GenericOrganic {
         log("Trying direct Vercel puppeteer-core for TPI/OII as last resort...");
         const vercelDirect = await solveViaVercelPuppeteer(url, log, 25000);
         if (vercelDirect) {
-            log("Vercel direct puppeteer TPI success -> " + vercelDirect);
-            return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
-          }
+          log("Vercel direct puppeteer TPI success -> " + vercelDirect);
+          return { success: true, url: vercelDirect, service: service.name, logs, time: Date.now() - t0 };
         }
 
         return { success: false, error: "TPI bypass failed - all methods exhausted (try different link or set PUPPETEER_SERVICE_URL/EZSOLVER_URL, or check if link is valid/expired)", logs, time: Date.now() - t0 };
@@ -732,7 +741,16 @@ class GenericOrganic {
         log("Direct POST without token failed");
       } catch (e) { log("Direct POST error: " + e.message); }
 
-      // No destination found via HTTP - try EzSolver with cookies from page
+      // Fast-fail for Turnstile links when direct POST failed - avoid 90s timeout
+      const hasTurnstile = html.includes('turnstile') || html.includes('cf-turnstile') || html.includes('0x4AAAAAABpMIvjgfpDTfgEj');
+      if (hasTurnstile) {
+        log("TPI Turnstile detected and direct POST failed - requires solver");
+        // For local/Vercel without solver, return fast instead of 45s EzSolver + 60s browser that will timeout
+        // Let outer visit handle it with fast-fail and helpful error
+        return null;
+      }
+
+      // No destination found via HTTP - try EzSolver with cookies from page (only for non-Turnstile or when direct POST not applicable)
       log("TPI HTTP found no valid destination - trying EzSolver...");
       try {
         const { html: freshHtml, cookies: pageCookies } = await followRedirects(url);
